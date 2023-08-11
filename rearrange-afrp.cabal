@@ -1,0 +1,106 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.1.
+--
+-- see: https://github.com/sol/hpack
+
+name:           rearrange-afrp
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/rearrange-afrp#readme>
+homepage:       https://github.com/githubuser/rearrange-afrp#readme
+bug-reports:    https://github.com/githubuser/rearrange-afrp/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2023 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/rearrange-afrp
+
+library
+  exposed-modules:
+      Control.Effect
+      Data.Memory.Dependencies
+      Data.Memory.EnvUtil
+      Data.Memory.Memory
+      Data.Memory.MemoryCell
+      Data.Memory.Program
+      Data.Memory.RunMemory
+      Data.Memory.RunMemoryConc
+      Data.Memory.ToCells
+      Data.Memory.Types
+      Data.Type.AdjacencyList
+      Data.Type.ComponentSearch
+      Data.Type.GraphUtils
+      Data.Type.HList
+      Data.Type.Rearrangement
+      Data.Type.TSort
+      Data.Type.Utils
+      MonadRW
+      RAFRP
+      Rearrange
+  other-modules:
+      Paths_rearrange_afrp
+  hs-source-dirs:
+      src
+  default-extensions:
+      GADTs
+      MultiParamTypeClasses
+      DataKinds
+      PolyKinds
+      FlexibleInstances
+      BangPatterns
+      TypeFamilies
+      ExplicitForAll
+      StandaloneKindSignatures
+      TypeOperators
+      ConstraintKinds
+      TypeApplications
+      FlexibleContexts
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type
+  build-depends:
+      base >=4.7 && <5
+    , data-default
+    , first-class-families
+    , monad-var
+    , type-level-sets
+  default-language: Haskell2010
+
+executable rearrange-afrp-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_rearrange_afrp
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , data-default
+    , first-class-families
+    , monad-var
+    , rearrange-afrp
+    , type-level-sets
+  default-language: Haskell2010
+
+test-suite rearrange-afrp-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_rearrange_afrp
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , data-default
+    , first-class-families
+    , monad-var
+    , rearrange-afrp
+    , type-level-sets
+  default-language: Haskell2010
