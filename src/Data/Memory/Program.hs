@@ -6,7 +6,8 @@
 
 module Data.Memory.Program (
     ParallelProgram, Program, makeProgram, makeParallelProgram,
-    runProgram, runParallelProgram, runProgram_, makeProgramInters
+    runProgram, runParallelProgram, runProgram_, makeProgramInters,
+    MakeProgConstraints, RunMems_
     -- runParallelProgramPartial, runProgramPartial
 ) where
 
@@ -27,8 +28,10 @@ data Prog m e = Prog {
 newtype ParallelProgram m e = ParallelProgram (Prog m e)
 newtype Program m e = Program (Prog m e)
 
-makeProgram :: (Monad m, OrderedConstraints IsLessThan mems mems',
-    NoConflicts_ env, NoOutputDep mems) =>
+type MakeProgConstraints mems mems' env =
+    (OrderedConstraints IsLessThan mems mems', NoConflicts_ env, NoOutputDep mems)
+
+makeProgram :: (Monad m, MakeProgConstraints mems mems' env) =>
     HList mems -> Set env -> m (Program mems' env)
 makeProgram mems env = do
     let mems' = ordered @IsLessThan mems

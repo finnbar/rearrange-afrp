@@ -6,7 +6,7 @@
 
 module Data.Memory.Dependencies where
 
-import Data.Memory.Types (MemoryReads, MemoryWrites)
+import Data.Memory.Types (MemoryReads, MemoryWrites, MemoryPreReads)
 import Data.Type.Utils (NonEmptyInt, Without)
 
 import Fcf
@@ -17,7 +17,7 @@ import Data.Kind (Constraint)
 
 data IsLessThan :: * -> * -> Exp Bool
 type instance Eval (IsLessThan x y) =
-    NonEmptyInt (MemoryWrites x) (MemoryReads y)
+    Eval (NonEmptyInt (MemoryWrites x) (MemoryReads y) || NonEmptyInt (MemoryPreReads x) (MemoryWrites y))
 
 -- Output dependency checking.
 
