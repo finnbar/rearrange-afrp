@@ -171,17 +171,23 @@ data AFRP arrow a b where
 -- Given the arrow combinator, its input and output types, its input name and BuildState,
 -- we need the output name, BuildState and the resulting program.
 
+-- HOW TO READ THE TYPE VARIABLES
+-- ns suffix => names, e.g. xns is names of x.
+-- fs = FreshState, used for carrying around the state needed by Fresh.
+-- prog = the Memory program being generated.
+-- arr = the type-level representation of the arrow program itself. Also used as a suffix.
+
 type AsMemory :: forall (ar :: Arity) (br :: Arity).
     Arrow ar br -> Desc ar -> Desc br -> Names ar -> FreshState -> Names br -> FreshState -> [*] -> Constraint
-class AsMemory arr a b ns fs ns' fs' prog | arr a b ns fs -> ns' fs' prog where
-    toProgram :: AFRP arr a b -> BuildState fs -> Ref ns a -> IO (BuildState fs', HList prog, Ref ns' b)
+class AsMemory arr a b ans fs bns fs' prog | arr a b ans fs -> bns fs' prog where
+    toProgram :: AFRP arr a b -> BuildState fs -> Ref ans a -> IO (BuildState fs', HList prog, Ref bns b)
 
-instance AsMemory ArrowId a a ns fs ns fs '[] where
+instance AsMemory ArrowId a a ans fs ans fs '[] where
     toProgram Id st rf = Prelude.return (st, HNil, rf)
 
-instance (Fresh b fs ns' fs', ReadCells a ns ar, WriteCells b ns' br,
+instance (Fresh b fs bns fs', ReadCells a ans ar, WriteCells b bns br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
-    AsMemory ArrowArr a b ns fs ns' fs' prog where
+    AsMemory ArrowArr a b ans fs bns fs' prog where
         toProgram (Arr f) st inref = do
             (outref, st') <- fresh st
             let comp = (f <$> readCells inref) Rearrange.>>= writeCells outref
@@ -189,26 +195,26 @@ instance (Fresh b fs ns' fs', ReadCells a ns ar, WriteCells b ns' br,
 
 -- TODO: Is it okay to write to the input? Will this cause correctness issues with
 -- e.g. multiple pre or dup?
-instance (Fresh a fs ns' fs', ReadCellsBefore a ns ar, WriteCells a ns' ar', MemoryInv ar ar',
+instance (Fresh a fs ans' fs', ReadCellsBefore a ans ar, WriteCells a ans' ar', MemoryInv ar ar',
     mems ~ MemoryPlus ar ar') =>
-    AsMemory ArrowPre a a ns fs ns' fs' '[Memory IO mems ()] where
+    AsMemory ArrowPre a a ans fs ans' fs' '[Memory IO mems ()] where
         toProgram (Pre v) st inref = do
             (outref, st') <- fresh st
             let comp = readCellsBefore inref Rearrange.>>= writeCells outref
             writeRef inref v
             Prelude.return (st', comp :+: HNil, outref)
 
-instance (AsMemory l a b ns fs ns' fs' progl, AsMemory r b c ns' fs' ns'' fs'' progr,
+instance (AsMemory larr a b ans fs bns fs' progl, AsMemory rarr b c bns fs' cns fs'' progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowGGG l r b) a c ns fs ns'' fs'' prog where
+    AsMemory (ArrowGGG larr rarr b) a c ans fs cns fs'' prog where
         toProgram (f :>>>: g) st inref = do
             (st', compf, midref) <- toProgram f st inref
             (st'', compg, outref) <- toProgram g st' midref
             Prelude.return (st'', hCombine compf compg, outref)
 
-instance (AsMemory l la lb lns fs lns' fs' progl, AsMemory r ra rb rns fs' rns' fs'' progr,
+instance (AsMemory larr la lb lans fs lbns fs' progl, AsMemory rarr ra rb rans fs' rbns fs'' progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowSSS l r) (P la ra) (P lb rb) (PN lns rns) fs (PN lns' rns') fs'' prog where
+    AsMemory (ArrowSSS larr rarr) (P la ra) (P lb rb) (PN lans rans) fs (PN lbns rbns) fs'' prog where
         toProgram (f :***: g) st (PRef inl inr) = do
             (st', compf, outl) <- toProgram f st inl
             (st'', compg, outr) <- toProgram g st' inr
@@ -216,9 +222,9 @@ instance (AsMemory l la lb lns fs lns' fs' progl, AsMemory r ra rb rns fs' rns' 
 
 -- TODO: We use two memory cells for loop constructs, which can definitely be optimised.
 
-instance (Fresh c fs cns fs', AsMemory arr (P a c) (P b c) (PN ns cns) fs' (PN ns'' cns') fs'' inprog,
+instance (Fresh c fs cns fs', AsMemory arr (P a c) (P b c) (PN ans cns) fs' (PN bns cns') fs'' inprog,
     UnifyCells c cns' cns unify, prog ~ Combine inprog unify) =>
-    AsMemory (ArrowLoop arr c) a b ns fs ns'' fs'' prog where
+    AsMemory (ArrowLoop arr c) a b ans fs bns fs'' prog where
         toProgram (Loop f) st inref = do
             (loopin, st') <- fresh st
             (st'', compf, PRef out loopout) <- toProgram f st' (PRef inref loopin)
@@ -228,9 +234,9 @@ instance (Fresh c fs cns fs', AsMemory arr (P a c) (P b c) (PN ns cns) fs' (PN n
 data CompiledAFRP (env :: [*]) (prog :: [*]) (a :: Desc x) (b :: Desc y) ns ns' =
     CAFRP (Set env) (HList prog) (Ref ns a) (Ref ns' b)
 
-makeAFRP :: (Fresh a '(0, '[]) ns fs, AsMemory arr a b ns fs ns' '(n', env') prog,
+makeAFRP :: (Fresh a '(0, '[]) ans fs, AsMemory arr a b ans fs bns '(n', env') prog,
     Sortable env', Nubable (Sort env'))
-    => AFRP arr a b -> IO (CompiledAFRP (AsSet env') prog a b ns ns')
+    => AFRP arr a b -> IO (CompiledAFRP (AsSet env') prog a b ans bns)
 makeAFRP afrp = do
     (inref, mv) <- fresh (MkBuildState HNil :: BuildState '(0, '[]))
     (MkBuildState env, prog, outref) <- toProgram afrp mv inref
@@ -244,7 +250,7 @@ hlistToSet s = asSet (hls s)
         hls (x :+: xs) = Ext x (hls xs)
 
 makeRunnable :: (MakeProgConstraints prog prog' env, RunMems_ IO prog' env) =>
-    CompiledAFRP env prog a b ns ns' -> IO (Val a -> IO (Val b))
+    CompiledAFRP env prog a b ans bns -> IO (Val a -> IO (Val b))
 makeRunnable (CAFRP env mems inref outref) = do
     prog <- makeProgram mems env
     Prelude.return $ \inp -> do
