@@ -59,20 +59,24 @@ writeRef (PRef l r) (Pair i j) = writeRef l i Prelude.>> writeRef r j
 -- Vars are Nat, so this stores the highest number used so far.
 -- (The program is created by setting BuildState to 0.)
 
-newtype BuildState (n :: Nat) (env :: [*]) = MkBuildState (HList env)
+type FreshState = (Nat, [*])
+type BuildState :: FreshState -> *
+type family EnvFromBuildState (x :: FreshState) where
+    EnvFromBuildState '(n, env) = env
+newtype BuildState (fs :: FreshState) = MkBuildState (HList (EnvFromBuildState fs))
 
-type Fresh :: forall s. Desc s -> Nat -> [*] -> Names s -> Nat -> [*] -> Constraint
-class Fresh d (n :: Nat) env ns (n' :: Nat) env' | d n env -> ns n' env' where
-    fresh :: BuildState n env -> IO (Ref ns d, BuildState n' env')
+type Fresh :: forall s. Desc s -> FreshState -> Names s -> FreshState -> Constraint
+class Fresh d fs ns fs' | d fs -> ns fs' where
+    fresh :: BuildState fs -> IO (Ref ns d, BuildState fs')
 
-instance (n' ~ n + 1) => Fresh (V (a :: *)) n env (VN n) n' (IOCell n a ': env) where
+instance (n' ~ n + 1) => Fresh (V (a :: *)) '(n, env) (VN n) '(n', IOCell n a ': env) where
     fresh (MkBuildState ps) = do
         ref <- newIORef undefined
         let cell = Cell @_ @_ @IO ref
         Prelude.return (VRef cell, MkBuildState $ cell :+: ps)
 
-instance (Fresh l n env lns n' env', Fresh r n' env' rns n'' env'') =>
-    Fresh (P l r) n env (PN lns rns) n'' env'' where
+instance (Fresh l fs lns fs', Fresh r fs' rns fs'') =>
+    Fresh (P l r) fs (PN lns rns) fs'' where
     fresh st = do
         (l, st') <- fresh st
         (r, st'') <- fresh st'
@@ -167,43 +171,44 @@ data AFRP arrow a b where
 -- Given the arrow combinator, its input and output types, its input name and BuildState,
 -- we need the output name, BuildState and the resulting program.
 
--- TODO: Try to reduce the number of type arguments. n and env can be glued together.
 type AsMemory :: forall (ar :: Arity) (br :: Arity).
-    Arrow ar br -> Desc ar -> Desc br -> Names ar -> Nat -> [*] -> Names br -> Nat -> [*] -> [*] -> Constraint
-class AsMemory arr a b ns n env ns' n' env' prog | arr a b ns n env -> ns' n' env' prog where
-    toProgram :: AFRP arr a b -> BuildState n env -> Ref ns a -> IO (BuildState n' env', HList prog, Ref ns' b)
+    Arrow ar br -> Desc ar -> Desc br -> Names ar -> FreshState -> Names br -> FreshState -> [*] -> Constraint
+class AsMemory arr a b ns fs ns' fs' prog | arr a b ns fs -> ns' fs' prog where
+    toProgram :: AFRP arr a b -> BuildState fs -> Ref ns a -> IO (BuildState fs', HList prog, Ref ns' b)
 
-instance AsMemory ArrowId a a ns n env ns n env '[] where
+instance AsMemory ArrowId a a ns fs ns fs '[] where
     toProgram Id st rf = Prelude.return (st, HNil, rf)
 
-instance (Fresh b n env ns' n' env', ReadCells a ns ar, WriteCells b ns' br,
+instance (Fresh b fs ns' fs', ReadCells a ns ar, WriteCells b ns' br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
-    AsMemory ArrowArr a b ns n env ns' n' env' prog where
+    AsMemory ArrowArr a b ns fs ns' fs' prog where
         toProgram (Arr f) st inref = do
             (outref, st') <- fresh st
             let comp = (f <$> readCells inref) Rearrange.>>= writeCells outref
             Prelude.return (st', comp :+: HNil, outref)
 
-instance (Fresh a n env ns' n' env', ReadCellsBefore a ns ar, WriteCells a ns' ar', MemoryInv ar ar',
+-- TODO: Is it okay to write to the input? Will this cause correctness issues with
+-- e.g. multiple pre or dup?
+instance (Fresh a fs ns' fs', ReadCellsBefore a ns ar, WriteCells a ns' ar', MemoryInv ar ar',
     mems ~ MemoryPlus ar ar') =>
-    AsMemory ArrowPre a a ns n env ns' n' env' '[Memory IO mems ()] where
+    AsMemory ArrowPre a a ns fs ns' fs' '[Memory IO mems ()] where
         toProgram (Pre v) st inref = do
             (outref, st') <- fresh st
             let comp = readCellsBefore inref Rearrange.>>= writeCells outref
             writeRef inref v
             Prelude.return (st', comp :+: HNil, outref)
 
-instance (AsMemory l a b ns n env ns' n' env' progl, AsMemory r b c ns' n' env' ns'' n'' env'' progr,
+instance (AsMemory l a b ns fs ns' fs' progl, AsMemory r b c ns' fs' ns'' fs'' progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowGGG l r b) a c ns n env ns'' n'' env'' prog where
+    AsMemory (ArrowGGG l r b) a c ns fs ns'' fs'' prog where
         toProgram (f :>>>: g) st inref = do
             (st', compf, midref) <- toProgram f st inref
             (st'', compg, outref) <- toProgram g st' midref
             Prelude.return (st'', hCombine compf compg, outref)
 
-instance (AsMemory l la lb lns n env lns' n' env' progl, AsMemory r ra rb rns n' env' rns' n'' env'' progr,
+instance (AsMemory l la lb lns fs lns' fs' progl, AsMemory r ra rb rns fs' rns' fs'' progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowSSS l r) (P la ra) (P lb rb) (PN lns rns) n env (PN lns' rns') n'' env'' prog where
+    AsMemory (ArrowSSS l r) (P la ra) (P lb rb) (PN lns rns) fs (PN lns' rns') fs'' prog where
         toProgram (f :***: g) st (PRef inl inr) = do
             (st', compf, outl) <- toProgram f st inl
             (st'', compg, outr) <- toProgram g st' inr
@@ -211,9 +216,9 @@ instance (AsMemory l la lb lns n env lns' n' env' progl, AsMemory r ra rb rns n'
 
 -- TODO: We use two memory cells for loop constructs, which can definitely be optimised.
 
-instance (Fresh c n env cns n' env', AsMemory arr (P a c) (P b c) (PN ns cns) n' env' (PN ns'' cns') n'' env'' inprog,
+instance (Fresh c fs cns fs', AsMemory arr (P a c) (P b c) (PN ns cns) fs' (PN ns'' cns') fs'' inprog,
     UnifyCells c cns' cns unify, prog ~ Combine inprog unify) =>
-    AsMemory (ArrowLoop arr c) a b ns n env ns'' n'' env'' prog where
+    AsMemory (ArrowLoop arr c) a b ns fs ns'' fs'' prog where
         toProgram (Loop f) st inref = do
             (loopin, st') <- fresh st
             (st'', compf, PRef out loopout) <- toProgram f st' (PRef inref loopin)
@@ -223,11 +228,11 @@ instance (Fresh c n env cns n' env', AsMemory arr (P a c) (P b c) (PN ns cns) n'
 data CompiledAFRP (env :: [*]) (prog :: [*]) (a :: Desc x) (b :: Desc y) ns ns' =
     CAFRP (Set env) (HList prog) (Ref ns a) (Ref ns' b)
 
-makeAFRP :: (Fresh a 0 '[] ns n env, AsMemory arr a b ns n env ns' n' env' prog,
+makeAFRP :: (Fresh a '(0, '[]) ns fs, AsMemory arr a b ns fs ns' '(n', env') prog,
     Sortable env', Nubable (Sort env'))
     => AFRP arr a b -> IO (CompiledAFRP (AsSet env') prog a b ns ns')
 makeAFRP afrp = do
-    (inref, mv) <- fresh (MkBuildState HNil :: BuildState 0 '[])
+    (inref, mv) <- fresh (MkBuildState HNil :: BuildState '(0, '[]))
     (MkBuildState env, prog, outref) <- toProgram afrp mv inref
     Prelude.return $ CAFRP (hlistToSet env) prog inref outref
 
