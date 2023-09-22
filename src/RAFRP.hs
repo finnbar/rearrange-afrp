@@ -86,7 +86,7 @@ type ReadCells :: forall (ar :: Arity). Desc ar -> Names ar -> MemState -> Const
 class ReadCells ac ns res | ac ns -> res where
     readCells :: Ref ns ac -> Memory IO res (Val ac)
 
-instance ReadCells (V a) (VN n) '( '[], '[], '[IOCell n a]) where
+instance ReadCells (V a) (VN n) '( '[], '[IOCell n a], '[]) where
     readCells _ = One <$> readIOCell
 
 instance (ReadCells lc ln lr, ReadCells rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr) => ReadCells (P lc rc) (PN ln rn) res where
@@ -94,45 +94,47 @@ instance (ReadCells lc ln lr, ReadCells rc rn rr, res ~ MemoryPlus lr rr, Memory
         left <- readCells lp
         Pair left <$> readCells rp
 
-type ReadCellsBefore :: forall (ar :: Arity). Desc ar -> Names ar -> MemState -> Constraint
-class ReadCellsBefore ac ns res | ac ns -> res where
-    readCellsBefore :: Ref ns ac -> Memory IO res (Val ac)
-
-instance ReadCellsBefore (V a) (VN n) '( '[IOCell n a], '[], '[]) where
-    readCellsBefore _ = One <$> readIOCellBefore
-
-instance (ReadCellsBefore lc ln lr, ReadCellsBefore rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr) => ReadCellsBefore (P lc rc) (PN ln rn) res where
-    readCellsBefore (PRef l r) = Rearrange.do
-        left <- readCellsBefore l
-        Pair left <$> readCellsBefore r
-
 type WriteCells :: forall (ar :: Arity). Desc ar -> Names ar -> MemState -> Constraint
 class WriteCells ac ns res | ac ns -> res where
     writeCells :: Ref ns ac -> Val ac -> Memory IO res ()
 
-instance WriteCells (V a) (VN n) '( '[], '[IOCell n a], '[]) where
+instance WriteCells (V a) (VN n) '( '[IOCell n a], '[], '[]) where
     writeCells _ (One v) = writeIOCell v
 
-instance (WriteCells lc ln lr, WriteCells rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr) => WriteCells (P lc rc) (PN ln rn) res where
+instance (WriteCells lc ln lr, WriteCells rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr)
+    => WriteCells (P lc rc) (PN ln rn) res where
     writeCells (PRef l r) (Pair a b) = Rearrange.do
         writeCells l a
         writeCells r b
 
-type UnifyCells :: forall (ar :: Arity). Desc ar -> Names ar -> Names ar -> [*] -> Constraint
-class UnifyCells d ns ns' prog | d ns ns' -> prog where
-    unifyCells :: Ref ns d -> Ref ns' d -> HList prog
+type WriteCellsAfter :: forall (ar :: Arity). Desc ar -> Names ar -> MemState -> Constraint
+class WriteCellsAfter ac ns res | ac ns -> res where
+    writeCellsAfter :: Ref ns ac -> Val ac -> Memory IO res ()
+
+instance WriteCellsAfter (V a) (VN n) '( '[], '[], '[IOCell n a]) where
+    writeCellsAfter _ (One v) = writeIOCellAfter v
+
+instance (WriteCellsAfter lc ln lr, WriteCellsAfter rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr)
+    => WriteCellsAfter (P lc rc) (PN ln rn) res where
+    writeCellsAfter (PRef l r) (Pair a b) = Rearrange.do
+        writeCellsAfter l a
+        writeCellsAfter r b
+
+type CopyCells :: forall (ar :: Arity). Desc ar -> Names ar -> Names ar -> [*] -> Constraint
+class CopyCells d ns ns' prog | d ns ns' -> prog where
+    copyCells :: Ref ns d -> Ref ns' d -> HList prog
 
 instance (ReadCells (V a) (VN n) resl, WriteCells (V a) (VN n') resr, res ~ MemoryPlus resl resr, MemoryInv resl resr)
-    => UnifyCells (V a) (VN n) (VN n') '[Memory IO res ()] where
-        unifyCells ra ra' =
+    => CopyCells (V a) (VN n) (VN n') '[Memory IO res ()] where
+        copyCells ra ra' =
             let comp = readCells ra Rearrange.>>= writeCells ra'
             in comp :+: HNil
 
-instance (UnifyCells l ln ln' resl, UnifyCells r rn rn' resr, res ~ Combine resl resr)
-    => UnifyCells (P l r) (PN ln rn) (PN ln' rn') res where
-        unifyCells (PRef ra ra') (PRef rb rb') =
-            let compl = unifyCells ra rb
-                compr = unifyCells ra' rb'
+instance (CopyCells l ln ln' resl, CopyCells r rn rn' resr, res ~ Combine resl resr)
+    => CopyCells (P l r) (PN ln rn) (PN ln' rn') res where
+        copyCells (PRef ra ra') (PRef rb rb') =
+            let compl = copyCells ra rb
+                compr = copyCells ra' rb'
             in hCombine compl compr
 
 -- Programmers write their code in this intermediate GADT.
@@ -204,14 +206,6 @@ instance AsMemory ArrowDropL (P a b) a (PN ans bns) fs ans fs '[] where
 instance AsMemory ArrowDropR (P a b) b (PN ans bns) fs bns fs '[] where
     toProgram DropR st (PRef _ br) = Prelude.return (st, HNil, br)
 
--- TODO: I am not convinced this will always be correct.
--- Consider Dup >>> (Pre v *** Pre w)
--- The pres will each write to the shared memory location, so only the second will prevail.
--- Easily solved by having different memory locations for the outputs, but this is notably less efficient.
--- Is there a way we can fix the Pre instance to work? If Pre only needed to write to its output cell then it would be perfect.
--- But then its copy (from input to output) needs to be _last_.
--- SEE NOTES ABOUT READBEFORE vs WRITEAFTER
--- Alternatively, can we avoid dup entirely? (My guess is no.)
 instance AsMemory ArrowDup a (P a a) ans fs (PN ans ans) fs '[] where
     toProgram Dup st ar = Prelude.return (st, HNil, PRef ar ar)
 
@@ -223,13 +217,13 @@ instance (Fresh b fs bns fs', ReadCells a ans ar, WriteCells b bns br,
             let comp = (f <$> readCells inref) Rearrange.>>= writeCells outref
             Prelude.return (st', comp :+: HNil, outref)
 
-instance (Fresh a fs ans' fs', ReadCellsBefore a ans ar, WriteCells a ans' ar', MemoryInv ar ar',
+instance (Fresh a fs ans' fs', ReadCells a ans ar, WriteCellsAfter a ans' ar', MemoryInv ar ar',
     mems ~ MemoryPlus ar ar') =>
     AsMemory ArrowPre a a ans fs ans' fs' '[Memory IO mems ()] where
         toProgram (Pre v) st inref = do
             (outref, st') <- fresh st
-            let comp = readCellsBefore inref Rearrange.>>= writeCells outref
-            writeRef inref v
+            let comp = readCells inref Rearrange.>>= writeCellsAfter outref
+            writeRef outref v
             Prelude.return (st', comp :+: HNil, outref)
 
 instance (AsMemory larr a b ans fs bns fs' progl, AsMemory rarr b c bns fs' cns fs'' progr,
@@ -251,23 +245,40 @@ instance (AsMemory larr la lb lans fs lbns fs' progl, AsMemory rarr ra rb rans f
 -- TODO: We use two memory cells for loop constructs, which can definitely be optimised.
 
 instance (Fresh c fs cns fs', AsMemory arr (P a c) (P b c) (PN ans cns) fs' (PN bns cns') fs'' inprog,
-    UnifyCells c cns' cns unify, prog ~ Combine inprog unify) =>
+    CopyCells c cns' cns copy, prog ~ Combine inprog copy) =>
     AsMemory (ArrowLoop arr c) a b ans fs bns fs'' prog where
         toProgram (Loop f) st inref = do
             (loopin, st') <- fresh st
             (st'', compf, PRef out loopout) <- toProgram f st' (PRef inref loopin)
-            let unifyLoop = unifyCells loopout loopin
-            Prelude.return (st'', hCombine compf unifyLoop, out)
+            let copyLoop = copyCells loopout loopin
+            Prelude.return (st'', hCombine compf copyLoop, out)
 
 data CompiledAFRP (env :: [*]) (prog :: [*]) (a :: Desc x) (b :: Desc y) ns ns' =
     CAFRP (Set env) (HList prog) (Ref ns a) (Ref ns' b)
 
-makeAFRP :: (Fresh a '(0, '[]) ans fs, AsMemory arr a b ans fs bns '(n', env') prog,
+-- The output cell of a pre will always contain the _next_ value, since it is written at the end of each run
+-- through writeCellsAfter (this is needed to break the loop - we think of this as the pre preloading the next
+-- value to return).
+-- This means that if have the output cell of a pre as the output of the entire program, reading it will give
+-- us the _next_ value being returned, not the current one.
+-- We fix this by adding one separate output cell, which the current output is copied to before any call to
+-- writeCellsAfter (just by using regular readCell >>= writeCell).
+type AddSeparateOutput fs prog ans a fs' prog' ans' copy = (Fresh a fs ans' fs', CopyCells a ans ans' copy, prog' ~ Combine prog copy)
+addSeparateOutput :: AddSeparateOutput fs prog ans a fs' prog' ans' copy
+    => (BuildState fs, HList prog, Ref ans a) -> IO (BuildState fs', HList prog', Ref ans' a)
+addSeparateOutput (st, prog, inref) = do
+    (outref, st') <- fresh st
+    let copyAns = copyCells inref outref
+    Prelude.return (st', hCombine prog copyAns, outref)
+
+makeAFRP :: (Fresh a '(0, '[]) ans fs, AsMemory arr a b ans fs bns fs' prog,
+    AddSeparateOutput fs' prog bns b '(n', env') prog' bns' copy,
     Sortable env', Nubable (Sort env'))
-    => AFRP arr a b -> IO (CompiledAFRP (AsSet env') prog a b ans bns)
+    => AFRP arr a b -> IO (CompiledAFRP (AsSet env') prog' a b ans bns')
 makeAFRP afrp = do
-    (inref, mv) <- fresh (MkBuildState HNil :: BuildState '(0, '[]))
-    (MkBuildState env, prog, outref) <- toProgram afrp mv inref
+    (inref, st) <- fresh (MkBuildState HNil :: BuildState '(0, '[]))
+    res <- toProgram afrp st inref
+    (MkBuildState env, prog, outref) <- addSeparateOutput res
     Prelude.return $ CAFRP (hlistToSet env) prog inref outref
 
 hlistToSet :: (Sortable xs, Nubable (Sort xs)) => HList xs -> Set (AsSet xs)

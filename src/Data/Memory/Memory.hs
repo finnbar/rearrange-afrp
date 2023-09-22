@@ -36,10 +36,10 @@ ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ a = a
 
-ifThenElseMem :: (Subset (TrioUnion ps ws rs) (TrioUnion ps'' ws'' rs''),
-    Subset (TrioUnion ps' ws' rs') (TrioUnion ps'' ws'' rs'')) =>
-    Bool -> Memory m '(ps, ws, rs) a -> Memory m '(ps', ws', rs') a
-    -> Memory m '(ps'', ws'', rs'') a
+ifThenElseMem :: (Subset (TrioUnion ws rs ps) (TrioUnion ws'' rs'' ps''),
+    Subset (TrioUnion ws' rs' ps') (TrioUnion ws'' rs'' ps'')) =>
+    Bool -> Memory m '(ws, rs, ps) a -> Memory m '(ws', rs', ps') a
+    -> Memory m '(ws'', rs'', ps'') a
 ifThenElseMem True  a _ = Mem $ \set -> runMemory a (subset set)
 ifThenElseMem False _ b = Mem $ \set -> runMemory b (subset set)
 

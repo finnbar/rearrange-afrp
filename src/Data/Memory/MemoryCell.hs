@@ -5,9 +5,9 @@
     AllowAmbiguousTypes, FunctionalDependencies, FlexibleContexts #-}
 
 module Data.Memory.MemoryCell (
-    readCell, writeCell, readCellBefore,
-    readIOCell, writeIOCell, readIOCellBefore,
-    readAutoCell, writeAutoCell, readAutoCellBefore,
+    readCell, writeCell, writeCellAfter,
+    readIOCell, writeIOCell, writeIOCellAfter,
+    readAutoCell, writeAutoCell, writeAutoCellAfter,
     Cell(..), CellUpdate(..),
     updated, updatedInEnv
     ) where
@@ -20,37 +20,37 @@ import Data.Proxy
 import Data.IORef
 
 readCell :: forall s v t m. (MonadRW m v, Constr m v t) =>
-    Memory m '( '[], '[], '[Cell v s t]) t
+    Memory m '( '[], '[Cell v s t], '[]) t
 readCell = Mem $ \(Ext (Cell pt) Empty) -> readVar pt
 
 writeCell :: forall s v t m. (MonadRW m v, Constr m v t) =>
-    t -> Memory m '( '[], '[Cell v s t], '[] ) ()
+    t -> Memory m '( '[Cell v s t], '[], '[] ) ()
 writeCell x = Mem $ \(Ext (Cell pt) Empty) -> writeVar pt x
 
-readCellBefore :: forall s v t m. (MonadRW m v, Constr m v t) =>
-    Memory m '( '[Cell v s t], '[], '[]) t
-readCellBefore = Mem $ \(Ext (Cell pt) Empty) -> readVar pt
+writeCellAfter :: forall s v t m. (MonadRW m v, Constr m v t) =>
+    t -> Memory m '( '[], '[], '[Cell v s t] ) ()
+writeCellAfter x = Mem $ \(Ext (Cell pt) Empty) -> writeVar pt x
 
-readIOCell :: forall s t. MIO '( '[], '[], '[IOCell s t]) t
+readIOCell :: forall s t. MIO '( '[], '[IOCell s t], '[]) t
 readIOCell = readCell
 
-writeIOCell :: forall s t. t -> MIO '( '[], '[IOCell s t], '[]) ()
+writeIOCell :: forall s t. t -> MIO '( '[IOCell s t], '[], '[]) ()
 writeIOCell = writeCell
 
-readIOCellBefore :: forall s t. MIO '( '[IOCell s t], '[], '[]) t
-readIOCellBefore = readCellBefore
+writeIOCellAfter :: forall s t. t -> MIO '( '[], '[], '[IOCell s t]) ()
+writeIOCellAfter = writeCellAfter
 
 readAutoCell :: forall c s t. (c ~ AutoCell s t) =>
-    Memory IO '( '[], '[], '[c]) t
+    Memory IO '( '[], '[c], '[]) t
 readAutoCell = Mem $ \(Ext (AutoCell pt) Empty) -> readIORef pt
 
 writeAutoCell :: forall c s t. (c ~ AutoCell s t) =>
-    t -> Memory IO '( '[], '[c], '[]) ()
+    t -> Memory IO '( '[c], '[], '[]) ()
 writeAutoCell x = Mem $ \(Ext (AutoCell pt) Empty) -> writeIORef pt x
 
-readAutoCellBefore :: forall c s t. (c ~ AutoCell s t) =>
-    Memory IO '( '[c], '[], '[]) t
-readAutoCellBefore = Mem $ \(Ext (AutoCell pt) Empty) -> readIORef pt
+writeAutoCellAfter :: forall c s t. (c ~ AutoCell s t) =>
+    t -> Memory IO '( '[], '[], '[c]) ()
+writeAutoCellAfter x = Mem $ \(Ext (AutoCell pt) Empty) -> writeIORef pt x
 
 updated :: forall s t v. KnownNat s => Cell v s t -> CellUpdate
 updated _ = AddrUpdate $ show $ natVal (Proxy :: Proxy s)

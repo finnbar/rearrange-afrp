@@ -30,12 +30,12 @@ type family LookupSpecific (env :: [*]) (xs :: [*]) :: [*] where
     LookupSpecific env (x ': xs) = LookupOne env x ': LookupSpecific env xs
 
 withEnv :: (rs ~ LookupSpecific env rs, ws ~ LookupSpecific env ws, ps ~ LookupSpecific env ps) =>
-    Set env -> Memory m '(ps, ws, rs) a -> Memory m '(ps, ws, rs) a
+    Set env -> Memory m '(ws, rs, ps) a -> Memory m '(ws, rs, ps) a
 withEnv _ = id
 {-# INLINE withEnv #-}
 
 withEnvM :: (rs ~ LookupSpecific env rs, ws ~ LookupSpecific env ws, ps ~ LookupSpecific env ps) =>
-    m (Set env) -> Memory m '(ps, ws, rs) a -> Memory m '(ps, ws, rs) a
+    m (Set env) -> Memory m '(ws, rs, ps) a -> Memory m '(ws, rs, ps) a
 withEnvM _ = id
 {-# INLINE withEnvM #-}
 
@@ -66,8 +66,8 @@ type family WithoutInters (xs :: [*]) :: [*] where
 
 type family GetEnvFromMems (xs :: [*]) :: [*] where
     GetEnvFromMems '[] = '[]
-    GetEnvFromMems (Memory _ '(ps, ws, rs) _ ': xs) =
-        Union ps (Union rs (Union ws (GetEnvFromMems xs)))
+    GetEnvFromMems (Memory _ '(ws, rs, ps) _ ': xs) =
+        Union ws (Union rs (Union ps (GetEnvFromMems xs)))
 
 type family LookupVT (xs :: [*]) (s :: Nat) :: (* -> *, *) where
     LookupVT (Cell v s t ': xs) s = '(v, t)

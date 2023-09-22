@@ -7,7 +7,7 @@
 module Data.Memory.Types (
     Memory(..), Cell(..), CellUpdate(..), IsMemory,
     Split(..), Set(..), Sort, MemoryUnion, MemoryPlus, MemoryWrites,
-    MemoryReads, MemoryPreReads, MIO, IOCell, TrioUnion, MemState,
+    MemoryReads, MemoryPostWrites, MIO, IOCell, TrioUnion, MemState,
     Subset(..), NoConflicts, NoConflicts_, AutoCell(..), GetName,
 ) where
 
@@ -20,7 +20,7 @@ import Data.IORef (IORef)
 
 type MemState = ([*], [*], [*])
 
--- NOTE: This version of memory now has three sections: prereads, writes and reads.
+-- NOTE: This version of memory now has three sections: writes, reads and postwrites.
 -- They execute in that order.
 newtype Memory (m :: * -> *) (s :: MemState) a =
     Mem { runMemory :: Set (MemoryUnion s) -> m a }
@@ -28,14 +28,14 @@ newtype Memory (m :: * -> *) (s :: MemState) a =
 instance Functor m => Functor (Memory m s) where
     fmap f (Mem rm) = Mem $ \s -> f <$> rm s
 
-type family MemoryPreReads x :: [*] where
-    MemoryPreReads (Memory m '(ps, ws, rs) a) = ps
+type family MemoryPostWrites x :: [*] where
+    MemoryPostWrites (Memory m '(ws, rs, ps) a) = ps
 
 type family MemoryWrites x :: [*] where
-    MemoryWrites (Memory m '(ps, ws, rs) a) = ws
+    MemoryWrites (Memory m '(ws, rs, ps) a) = ws
 
 type family MemoryReads x :: [*] where
-    MemoryReads (Memory m '(ps, ws, rs) a) = rs
+    MemoryReads (Memory m '(ws, rs, ps) a) = rs
 
 data Cell (v :: * -> *) (s :: Nat) (t :: *) where
     Cell :: forall s t m v. (Monad m, MonadRW m v, Constr m v t) => v t -> Cell v s t
@@ -61,10 +61,10 @@ type instance Cmp (AutoCell s t) (Cell v s' t') = CmpNat s s'
 type TrioUnion as bs cs = Union as (Union bs cs)
 
 type family MemoryUnion (s :: MemState) :: [*] where
-    MemoryUnion '(ps, ws, rs) = TrioUnion ps ws rs
+    MemoryUnion '(ws, rs, ps) = TrioUnion ws rs ps
 
 type family MemoryPlus (s :: MemState) (t :: MemState) :: MemState where
-    MemoryPlus '(ps, ws, rs) '(ps', ws', rs') = '(Union ps ps', Union ws ws', Union rs rs')
+    MemoryPlus '(ws, rs, ps) '(ws', rs', ps') = '(Union ws ws', Union rs rs', Union ps ps')
 
 type family IsMemory (x :: MemState) :: Constraint where
     IsMemory '(s, t, u) = (IsSet s, IsSet t, IsSet u)

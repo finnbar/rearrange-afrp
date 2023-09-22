@@ -50,3 +50,5 @@ main = do
     out23 <- runnable3 (One 4)
     print out13
     print out23
+
+-- [5,1], [6,4], 3, 7, 9, 14
