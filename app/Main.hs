@@ -22,6 +22,15 @@ prog2 = Loop $ arr2 :>>>: (Id :***: Pre (One 0))
 prog2Run :: IO (Val (V Int) -> IO (Val (V Int)))
 prog2Run = makeAFRP prog2 >>= makeRunnable
 
+arr3 :: AFRP _ (P (V Int) (V Int)) (V Int)
+arr3 = Arr (\(Pair (One x) (One y)) -> One $ x + y)
+
+prog3 :: AFRP _ (V Int) (V Int)
+prog3 = arr1 :>>>: Dup :>>>: (arr2 :***: Pre (Pair (One 1) (One 2))) :>>>: (DropL :***: DropL) :>>>: arr3
+
+prog3Run :: IO (Val (V Int) -> IO (Val (V Int)))
+prog3Run = makeAFRP prog3 >>= makeRunnable
+
 main :: IO ()
 main = do
     runnable1 <- prog1Run
@@ -35,3 +44,9 @@ main = do
     out22 <- runnable2 (One 4)
     print out12
     print out22
+
+    runnable3 <- prog3Run
+    out13 <- runnable3 (One 3)
+    out23 <- runnable3 (One 4)
+    print out13
+    print out23

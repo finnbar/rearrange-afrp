@@ -143,6 +143,9 @@ instance (UnifyCells l ln ln' resl, UnifyCells r rn rn' resr, res ~ Combine resl
 type Arrow :: Arity -> Arity -> *
 data Arrow ar ar' where
     ArrowId :: Arrow a a
+    ArrowDropL :: Arrow (a ::: b) b
+    ArrowDropR :: Arrow (a ::: b) a
+    ArrowDup :: Arrow a (a ::: a)
     ArrowArr :: Arrow a b
     ArrowPre :: Arrow a b
     ArrowGGG :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
@@ -159,7 +162,17 @@ type family ArityFromDesc d where
 -- (That's dependent types innit.)
 type AFRP :: forall (ar :: Arity) (ar' :: Arity). Arrow ar ar' -> Desc ar -> Desc ar' -> *
 data AFRP arrow a b where
+    -- Routing
     Id :: AFRP ArrowId a a
+    DropL :: AFRP ArrowDropL (P a b) b
+    DropR :: AFRP ArrowDropR (P a b) a
+    Dup :: AFRP ArrowDup a (P a a)
+    -- NB Swap = Dup >>> (DropL *** DropR)
+    -- Assoc = Dup >>> ((Id *** DropR) *** (DropL >>> DropL))
+    -- Unassoc = Dup >>> ((DropR >>> DropR) *** (DropL *** Id))
+    -- Thus we only need Drop and Dup.
+
+    -- Arrows
     Arr :: (Val a -> Val b) -> AFRP ArrowArr a b
     Pre :: Val a -> AFRP ArrowPre a a
     (:>>>:) :: AFRP ar a b -> AFRP ar' b c -> AFRP (ArrowGGG ar ar' b) a c
@@ -185,6 +198,23 @@ class AsMemory arr a b ans fs bns fs' prog | arr a b ans fs -> bns fs' prog wher
 instance AsMemory ArrowId a a ans fs ans fs '[] where
     toProgram Id st rf = Prelude.return (st, HNil, rf)
 
+instance AsMemory ArrowDropL (P a b) a (PN ans bns) fs ans fs '[] where
+    toProgram DropL st (PRef ar _) = Prelude.return (st, HNil, ar)
+
+instance AsMemory ArrowDropR (P a b) b (PN ans bns) fs bns fs '[] where
+    toProgram DropR st (PRef _ br) = Prelude.return (st, HNil, br)
+
+-- TODO: I am not convinced this will always be correct.
+-- Consider Dup >>> (Pre v *** Pre w)
+-- The pres will each write to the shared memory location, so only the second will prevail.
+-- Easily solved by having different memory locations for the outputs, but this is notably less efficient.
+-- Is there a way we can fix the Pre instance to work? If Pre only needed to write to its output cell then it would be perfect.
+-- But then its copy (from input to output) needs to be _last_.
+-- SEE NOTES ABOUT READBEFORE vs WRITEAFTER
+-- Alternatively, can we avoid dup entirely? (My guess is no.)
+instance AsMemory ArrowDup a (P a a) ans fs (PN ans ans) fs '[] where
+    toProgram Dup st ar = Prelude.return (st, HNil, PRef ar ar)
+
 instance (Fresh b fs bns fs', ReadCells a ans ar, WriteCells b bns br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
     AsMemory ArrowArr a b ans fs bns fs' prog where
@@ -193,8 +223,6 @@ instance (Fresh b fs bns fs', ReadCells a ans ar, WriteCells b bns br,
             let comp = (f <$> readCells inref) Rearrange.>>= writeCells outref
             Prelude.return (st', comp :+: HNil, outref)
 
--- TODO: Is it okay to write to the input? Will this cause correctness issues with
--- e.g. multiple pre or dup?
 instance (Fresh a fs ans' fs', ReadCellsBefore a ans ar, WriteCells a ans' ar', MemoryInv ar ar',
     mems ~ MemoryPlus ar ar') =>
     AsMemory ArrowPre a a ans fs ans' fs' '[Memory IO mems ()] where
