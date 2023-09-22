@@ -9,9 +9,9 @@ import Rearrange
 import Data.Memory.Types (MemState, MemoryPlus)
 import Data.Memory.Memory (MemoryInv)
 import Data.Type.Utils
-import Data.Type.Set
 import Data.Kind (Constraint)
-import Data.IORef (newIORef, writeIORef, readIORef)
+import Data.IORef (writeIORef, readIORef, newIORef)
+import Data.Type.Set
 
 -- * Data types and constructors
 
@@ -45,33 +45,6 @@ data Ref nam desc where
     VRef :: IOCell n a -> Ref (VN n) (V a)
     PRef :: Ref ln l -> Ref rn r -> Ref (PN ln rn) (P l r)
 
-type Fresh :: forall s. Desc s -> Names s -> Nat -> Nat -> Constraint
-class Fresh d ns (n :: Nat) (n' :: Nat) | d n -> ns n' where
-    fresh :: MaxVar n -> IO (Ref ns d, MaxVar n')
-
-instance (n' ~ n + 1) => Fresh (V (a :: *)) (VN n) n n' where
-    fresh _ = do
-        ir <- newIORef undefined
-        Prelude.return (VRef $ Cell @n @a @IO ir, VarState)
-
-instance (Fresh l ln n n', Fresh r rn n' n'') => Fresh (P l r) (PN ln rn) n n'' where
-    fresh mv = do
-        (l, mv') <- fresh mv
-        (r, mv'') <- fresh mv'
-        Prelude.return (PRef l r, mv'')
-
-class Cells desc names set | desc names -> set where
-    asCells :: Ref names desc -> Set set
-
-instance Cells (V a) (VN n) '[IOCell n a] where
-    asCells (VRef i) = asSet $ Ext i Empty
-
-instance (Cells l ln ls, Cells r rn rs, res ~ Union ls rs, Unionable ls rs) => Cells (P l r) (PN ln rn) res where
-    asCells (PRef x y) = let
-        setx = asCells @l @ln x
-        sety = asCells @r @rn y
-        in union setx sety :: Set res
-
 readRef :: Ref n d -> IO (Val d)
 readRef (VRef (Cell i)) = One <$> readIORef i
 readRef (PRef l r) = Pair <$> readRef l <*> readRef r
@@ -79,6 +52,31 @@ readRef (PRef l r) = Pair <$> readRef l <*> readRef r
 writeRef :: Ref n d -> Val d -> IO ()
 writeRef (VRef (Cell i)) (One v) = writeIORef i v
 writeRef (PRef l r) (Pair i j) = writeRef l i Prelude.>> writeRef r j
+
+-- Used by Pre to note what defaults some memory cells need (since they are the values for pre at t=0).
+
+-- In order to generate fresh type variables, we need a state to track which vars are unused.
+-- Vars are Nat, so this stores the highest number used so far.
+-- (The program is created by setting BuildState to 0.)
+
+newtype BuildState (n :: Nat) (env :: [*]) = MkBuildState (HList env)
+
+type Fresh :: forall s. Desc s -> Nat -> [*] -> Names s -> Nat -> [*] -> Constraint
+class Fresh d (n :: Nat) env ns (n' :: Nat) env' | d n env -> ns n' env' where
+    fresh :: BuildState n env -> IO (Ref ns d, BuildState n' env')
+
+instance (n' ~ n + 1) => Fresh (V (a :: *)) n env (VN n) n' (IOCell n a ': env) where
+    fresh (MkBuildState ps) = do
+        ref <- newIORef undefined
+        let cell = Cell @_ @_ @IO ref
+        Prelude.return (VRef cell, MkBuildState $ cell :+: ps)
+
+instance (Fresh l n env lns n' env', Fresh r n' env' rns n'' env'') =>
+    Fresh (P l r) n env (PN lns rns) n'' env'' where
+    fresh st = do
+        (l, st') <- fresh st
+        (r, st'') <- fresh st'
+        Prelude.return (PRef l r, st'')
 
 type ReadCells :: forall (ar :: Arity). Desc ar -> Names ar -> MemState -> Constraint
 class ReadCells ac ns res | ac ns -> res where
@@ -100,9 +98,9 @@ instance ReadCellsBefore (V a) (VN n) '( '[IOCell n a], '[], '[]) where
     readCellsBefore _ = One <$> readIOCellBefore
 
 instance (ReadCellsBefore lc ln lr, ReadCellsBefore rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr) => ReadCellsBefore (P lc rc) (PN ln rn) res where
-    readCellsBefore (PRef lp rp) = Rearrange.do
-        left <- readCellsBefore lp
-        Pair left <$> readCellsBefore rp
+    readCellsBefore (PRef l r) = Rearrange.do
+        left <- readCellsBefore l
+        Pair left <$> readCellsBefore r
 
 type WriteCells :: forall (ar :: Arity). Desc ar -> Names ar -> MemState -> Constraint
 class WriteCells ac ns res | ac ns -> res where
@@ -112,9 +110,9 @@ instance WriteCells (V a) (VN n) '( '[], '[IOCell n a], '[]) where
     writeCells _ (One v) = writeIOCell v
 
 instance (WriteCells lc ln lr, WriteCells rc rn rr, res ~ MemoryPlus lr rr, MemoryInv lr rr) => WriteCells (P lc rc) (PN ln rn) res where
-    writeCells (PRef lp rp) (Pair a b) = Rearrange.do
-        writeCells lp a
-        writeCells rp b
+    writeCells (PRef l r) (Pair a b) = Rearrange.do
+        writeCells l a
+        writeCells r b
 
 type UnifyCells :: forall (ar :: Arity). Desc ar -> Names ar -> Names ar -> [*] -> Constraint
 class UnifyCells d ns ns' prog | d ns ns' -> prog where
@@ -164,93 +162,81 @@ data AFRP arrow a b where
     (:***:) :: AFRP ar a b -> AFRP ar' a' b' -> AFRP (ArrowSSS ar ar') (P a a') (P b b')
     Loop :: AFRP ar (P a c) (P b c) -> AFRP (ArrowLoop ar c) a b
 
--- In order to generate fresh type variables, we need a state to track which vars are unused.
--- Vars are Nat, so this stores the highest number used so far.
--- (The program is created by setting MaxVar to 0.)
-
-data MaxVar (n :: Nat) = VarState
-
 -- Since the type of the Memory computation as output is going to differ based on which
 -- Arrow combinator we use, we need a type family to guide the relevant type inference.
--- Given the arrow combinator, its input and output types, its input name and MaxVar,
--- we need the output name, MaxVar and the resulting program.
+-- Given the arrow combinator, its input and output types, its input name and BuildState,
+-- we need the output name, BuildState and the resulting program.
 
-type AsMemory :: forall (ar :: Arity) (br :: Arity). Arrow ar br -> Desc ar -> Desc br -> Names ar -> Nat -> Names br -> Nat -> [*] -> [*] -> Constraint
-class AsMemory arr a b ns n ns' n' prog env | arr a b ns n -> ns' n' prog env where
-    toProgram :: AFRP arr a b -> MaxVar n -> Ref ns a -> IO (MaxVar n', HList prog, Ref ns' b, Set env)
+-- TODO: Try to reduce the number of type arguments. n and env can be glued together.
+type AsMemory :: forall (ar :: Arity) (br :: Arity).
+    Arrow ar br -> Desc ar -> Desc br -> Names ar -> Nat -> [*] -> Names br -> Nat -> [*] -> [*] -> Constraint
+class AsMemory arr a b ns n env ns' n' env' prog | arr a b ns n env -> ns' n' env' prog where
+    toProgram :: AFRP arr a b -> BuildState n env -> Ref ns a -> IO (BuildState n' env', HList prog, Ref ns' b)
 
-instance AsMemory ArrowId a a ns n ns n '[] '[] where
-    toProgram Id mv rf = Prelude.return (mv, HNil, rf, Empty)
+instance AsMemory ArrowId a a ns n env ns n env '[] where
+    toProgram Id st rf = Prelude.return (st, HNil, rf)
 
-instance (Fresh b ns' n n', ReadCells a ns ar, WriteCells b ns' br,
-    Cells a ns seta, Cells b ns' setb, MemoryInv ar br, Unionable seta setb,
-    prog ~ '[Memory IO (MemoryPlus ar br) ()],
-    env ~ Union seta setb) =>
-    AsMemory ArrowArr a b ns n ns' n' prog env where
-        toProgram (Arr f) mv inref = do
-            (outref, mv') <- fresh mv
+instance (Fresh b n env ns' n' env', ReadCells a ns ar, WriteCells b ns' br,
+    MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
+    AsMemory ArrowArr a b ns n env ns' n' env' prog where
+        toProgram (Arr f) st inref = do
+            (outref, st') <- fresh st
             let comp = (f <$> readCells inref) Rearrange.>>= writeCells outref
-                incells :: Set seta
-                incells = asCells @a @ns inref
-                outcells :: Set setb
-                outcells = asCells @b @ns' outref
-            Prelude.return (mv', comp :+: HNil, outref, incells `union` outcells)
+            Prelude.return (st', comp :+: HNil, outref)
 
-instance (Fresh a ns' n n', ReadCellsBefore a ns ar, WriteCells a ns' ar', MemoryInv ar ar',
-    Cells a ns seta, Cells a ns' seta', Unionable seta seta',
-    prog ~ '[Memory IO (MemoryPlus ar ar') ()],
-    env ~ Union seta seta') =>
-    AsMemory ArrowPre a a ns n ns' n' prog env where
-        toProgram (Pre v) mv inref = do
-            (outref, mv') <- fresh mv
+instance (Fresh a n env ns' n' env', ReadCellsBefore a ns ar, WriteCells a ns' ar', MemoryInv ar ar',
+    mems ~ MemoryPlus ar ar') =>
+    AsMemory ArrowPre a a ns n env ns' n' env' '[Memory IO mems ()] where
+        toProgram (Pre v) st inref = do
+            (outref, st') <- fresh st
             let comp = readCellsBefore inref Rearrange.>>= writeCells outref
-                incells :: Set seta
-                incells = asCells inref
-                outcells :: Set seta'
-                outcells = asCells outref
             writeRef inref v
-            Prelude.return (mv', comp :+: HNil, outref, incells `union` outcells)
+            Prelude.return (st', comp :+: HNil, outref)
 
-instance (AsMemory l a b ns n ns' n' progl envl, AsMemory r b c ns' n' ns'' n'' progr envr,
-    prog ~ Combine progl progr, env ~ Union envl envr, Unionable envl envr) =>
-    AsMemory (ArrowGGG l r b) a c ns n ns'' n'' prog env where
-        toProgram (f :>>>: g) mv inref = do
-            (mv', compf, midref, envl) <- toProgram f mv inref
-            (mv'', compg, outref, envr) <- toProgram g mv' midref
-            Prelude.return (mv'', hCombine compf compg, outref, envl `union` envr)
+instance (AsMemory l a b ns n env ns' n' env' progl, AsMemory r b c ns' n' env' ns'' n'' env'' progr,
+    prog ~ Combine progl progr) =>
+    AsMemory (ArrowGGG l r b) a c ns n env ns'' n'' env'' prog where
+        toProgram (f :>>>: g) st inref = do
+            (st', compf, midref) <- toProgram f st inref
+            (st'', compg, outref) <- toProgram g st' midref
+            Prelude.return (st'', hCombine compf compg, outref)
 
-instance (AsMemory l la lb lns n lns' n' progl envl, AsMemory r ra rb rns n' rns' n'' progr envr,
-    prog ~ Combine progl progr, env ~ Union envl envr, Unionable envl envr) =>
-    AsMemory (ArrowSSS l r) (P la ra) (P lb rb) (PN lns rns) n (PN lns' rns') n'' prog env where
-        toProgram (f :***: g) mv (PRef inl inr) = do
-            (mv', compf, outl, envl) <- toProgram f mv inl
-            (mv'', compg, outr, envr) <- toProgram g mv' inr
-            Prelude.return (mv'', hCombine compf compg, PRef outl outr, envl `union` envr)
+instance (AsMemory l la lb lns n env lns' n' env' progl, AsMemory r ra rb rns n' env' rns' n'' env'' progr,
+    prog ~ Combine progl progr) =>
+    AsMemory (ArrowSSS l r) (P la ra) (P lb rb) (PN lns rns) n env (PN lns' rns') n'' env'' prog where
+        toProgram (f :***: g) st (PRef inl inr) = do
+            (st', compf, outl) <- toProgram f st inl
+            (st'', compg, outr) <- toProgram g st' inr
+            Prelude.return (st'', hCombine compf compg, PRef outl outr)
 
 -- TODO: We use two memory cells for loop constructs, which can definitely be optimised.
 
-instance (Fresh c cns n n', AsMemory arr (P a c) (P b c) (PN ns cns) n' (PN ns'' cns') n'' inprog inenv,
-    env ~ Union inenv setcs, setcs ~ Union setc setc', Cells c cns setc, Cells c cns' setc',
-    Unionable inenv setcs, Unionable setc setc', UnifyCells c cns' cns unify, prog ~ Combine inprog unify) =>
-    AsMemory (ArrowLoop arr c) a b ns n ns'' n'' prog env where
-        toProgram (Loop f) mv inref = do
-            (loopin, mv') <- fresh mv
-            (mv'', compf, PRef out loopout, env) <- toProgram f mv' (PRef inref loopin)
-            let 
-                loopinEnv = asCells loopin
-                loopOutEnv = asCells loopout
-                unifyLoop = unifyCells loopout loopin
-            Prelude.return (mv'', hCombine compf unifyLoop, out, env `union` (loopinEnv `union` loopOutEnv))
+instance (Fresh c n env cns n' env', AsMemory arr (P a c) (P b c) (PN ns cns) n' env' (PN ns'' cns') n'' env'' inprog,
+    UnifyCells c cns' cns unify, prog ~ Combine inprog unify) =>
+    AsMemory (ArrowLoop arr c) a b ns n env ns'' n'' env'' prog where
+        toProgram (Loop f) st inref = do
+            (loopin, st') <- fresh st
+            (st'', compf, PRef out loopout) <- toProgram f st' (PRef inref loopin)
+            let unifyLoop = unifyCells loopout loopin
+            Prelude.return (st'', hCombine compf unifyLoop, out)
 
 data CompiledAFRP (env :: [*]) (prog :: [*]) (a :: Desc x) (b :: Desc y) ns ns' =
     CAFRP (Set env) (HList prog) (Ref ns a) (Ref ns' b)
 
-makeAFRP :: (Fresh a ns 0 n, AsMemory arr a b ns n ns' n' prog env) 
-    => AFRP arr a b -> IO (CompiledAFRP env prog a b ns ns')
+makeAFRP :: (Fresh a 0 '[] ns n env, AsMemory arr a b ns n env ns' n' env' prog,
+    Sortable env', Nubable (Sort env'))
+    => AFRP arr a b -> IO (CompiledAFRP (AsSet env') prog a b ns ns')
 makeAFRP afrp = do
-    (inref, mv) <- fresh (VarState :: MaxVar 0)
-    (VarState, prog, outref, env) <- toProgram afrp mv inref
-    Prelude.return $ CAFRP env prog inref outref
+    (inref, mv) <- fresh (MkBuildState HNil :: BuildState 0 '[])
+    (MkBuildState env, prog, outref) <- toProgram afrp mv inref
+    Prelude.return $ CAFRP (hlistToSet env) prog inref outref
+
+hlistToSet :: (Sortable xs, Nubable (Sort xs)) => HList xs -> Set (AsSet xs)
+hlistToSet s = asSet (hls s)
+    where
+        hls :: HList xs -> Set xs
+        hls HNil = Empty
+        hls (x :+: xs) = Ext x (hls xs)
 
 makeRunnable :: (MakeProgConstraints prog prog' env, RunMems_ IO prog' env) =>
     CompiledAFRP env prog a b ns ns' -> IO (Val a -> IO (Val b))
