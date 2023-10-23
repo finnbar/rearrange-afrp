@@ -192,6 +192,12 @@ data AFRP arrow a b where
 -- prog = the Memory program being generated.
 -- arr = the type-level representation of the arrow program itself. Also used as a suffix.
 
+-- NOTE: We cannot do this by having lowercase arr etc. instead of transforming a special GADT.
+-- This is because the types get very difficult for a user to specify: 
+-- If we just have e.g. lowercase arr :: (Val a -> Val b) -> BuildState fs -> Ref ans a -> IO (BuildState fs', HList prog, Ref bns b)
+-- then a user will have to type `arr f bs rf` with the correct fs' and prog.
+-- There might be a world where a user can say that the type is (Arr <a bunch of arguments>) but that seems worse than the current one.
+
 type AsMemory :: forall (ar :: Arity) (br :: Arity).
     Arrow ar br -> Desc ar -> Desc br -> Names ar -> FreshState -> Names br -> FreshState -> [*] -> Constraint
 class AsMemory arr a b ans fs bns fs' prog | arr a b ans fs -> bns fs' prog where
