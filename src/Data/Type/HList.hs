@@ -1,15 +1,19 @@
 -- This module implements the common HList structure, along with a few helper
 -- functions.
 
-{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances, FunctionalDependencies,
+    ScopedTypeVariables #-}
 
 module Data.Type.HList (
     HList(..),
     hCombine, hHead, hTail,
-    FlattenToHList
+    FlattenToHList,
+    LookupNth(..)
     ) where
 
 import Data.Type.Utils (Combine)
+import Data.Proxy
+import GHC.TypeLits
 
 -- The HList structure.
 
@@ -42,3 +46,12 @@ hTail (_ :+: xs) = xs
 type family FlattenToHList (inp :: [[*]]) :: [*] where
     FlattenToHList '[] = '[]
     FlattenToHList (x ': xs) = HList x ': FlattenToHList xs
+
+class LookupNth n xs r | n xs -> r where
+    lookupNth :: Proxy n -> HList xs -> r
+
+instance LookupNth 0 (x ': xs) x where
+    lookupNth Proxy (v :+: _) = v
+
+instance forall n x xs r. (LookupNth (n-1) xs r) => LookupNth n (x ': xs) r where
+    lookupNth Proxy (_ :+: vs) = lookupNth (Proxy :: Proxy (n-1)) vs
