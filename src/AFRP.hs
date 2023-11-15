@@ -3,6 +3,7 @@ module AFRP where
 import Rearrange
 import GHC.TypeLits
 import Data.IORef (writeIORef, readIORef)
+import Data.Proxy
 
 data Arity where
     O :: Arity
@@ -15,25 +16,8 @@ data Desc x where
 
 type Desc' :: Arity -> *
 data Desc' ar where
-    VN :: forall (a :: *). Maybe Nat -> a -> Desc' O
+    VN :: forall (a :: *). Nat -> a -> Desc' O
     PN :: Desc' l -> Desc' r -> Desc' (l ::: r)
-
-type DescProxy' :: Desc' d -> *
-data DescProxy' d where
-    VProx :: DescProxy' (VN (Just s) a)
-    VNoProx :: DescProxy' (VN Nothing a)
-    PProx :: DescProxy' l -> DescProxy' r -> DescProxy' (PN l r)
-
-class MakeDescProxy' d where
-    makeDescProxy' :: DescProxy' d
-
-instance MakeDescProxy' (VN (Just s) a) where
-    makeDescProxy' = VProx
-instance MakeDescProxy' (VN Nothing a) where
-    makeDescProxy' = VNoProx
-instance (MakeDescProxy' l, MakeDescProxy' r)
-    => MakeDescProxy' (PN l r) where
-        makeDescProxy' = PProx makeDescProxy' makeDescProxy'
 
 type Val :: forall s. Desc s -> *
 data Val x where
@@ -48,7 +32,7 @@ instance (Show (Val l), Show (Val r)) => Show (Val (P l r)) where
 
 type Ref :: forall s. Desc' s -> *
 data Ref desc where
-    VRef :: IOCell n a -> Ref (VN (Just n) a)
+    VRef :: IOCell n a -> Ref (VN n a)
     PRef :: Ref l -> Ref r -> Ref (PN l r)
 
 type AsDesc :: forall (ar :: Arity). Desc' ar -> Desc ar
@@ -63,6 +47,11 @@ readRef (PRef l r) = Pair <$> readRef l <*> readRef r
 writeRef :: Ref d -> Val (AsDesc d) -> IO ()
 writeRef (VRef (Cell i)) (One v) = writeIORef i v
 writeRef (PRef l r) (Pair i j) = writeRef l i Prelude.>> writeRef r j
+
+splitProx :: Proxy (d l r) -> (Proxy l, Proxy r)
+splitProx Proxy = (Proxy, Proxy)
+pairProx :: Proxy l -> Proxy r -> Proxy (d l r)
+pairProx Proxy Proxy = Proxy
 
 -- Programmers write their code in this intermediate GADT.
 -- This is so that programmers can write programs without worrying about names.

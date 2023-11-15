@@ -43,6 +43,7 @@ library
       Data.Type.Rearrangement
       Data.Type.TSort
       Data.Type.Utils
+      MakeMIO
       MonadRW
       Naming
       RAFRP
