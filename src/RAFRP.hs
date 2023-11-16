@@ -1,4 +1,5 @@
-{-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables,
+    FunctionalDependencies #-}
 
 module RAFRP (module AFRP, makeAFRP, makeRunnable) where
 
@@ -18,6 +19,7 @@ import Data.Proxy
 -- We fix this by adding one separate output cell by postcomposing >>> arr id to the input.
 -- TODO I thought I could be smart with >>> arr id, but it makes Haskell panic.
 -- Make the Augment type class, which adds on the final memory cell.
+-- NOTE The tests in Main currently work.
 makeAFRP :: forall a a' fs arr b arr' b' fs' env prog.
     (Fresh a EmptyFreshState a' fs,
     AssignMemory arr a b arr' a' b' fs fs',

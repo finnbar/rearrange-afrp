@@ -7,8 +7,9 @@ import RAFRP
 arr1 :: AFRP _ (V Int) (P (V Int) (V Int))
 arr1 = Arr (\(One x) -> let y = x + 1 in Pair (One y) (One y))
 
+-- NOTE: The Arr id are added to avoid the Pre bug. The bug still needs fixing.
 prog1 :: AFRP _ (V Int) (P (V Int) (V Int))
-prog1 = arr1 :>>>: (Arr (\(One x) -> One (x + 1)) :***: Pre (One 1))
+prog1 = arr1 :>>>: (Arr (\(One x) -> One (x + 1)) :***: Pre (One 1)) :>>>: Arr id
 
 prog1Run :: IO (Val (V Int) -> IO (Val (P (V Int) (V Int))))
 prog1Run = makeAFRP prog1 >>= makeRunnable
@@ -17,7 +18,7 @@ arr2 :: AFRP _ (P (V Int) (V Int)) (P (V Int) (V Int))
 arr2 = Arr (\(Pair (One x) (One y)) -> let z = x + y in Pair (One z) (One z))
 
 prog2 :: AFRP _ (V Int) (V Int)
-prog2 = Loop $ arr2 :>>>: (Id :***: Pre (One 0))
+prog2 = Loop (arr2 :>>>: (Id :***: Pre (One 0))) :>>>: Arr id
 
 prog2Run :: IO (Val (V Int) -> IO (Val (V Int)))
 prog2Run = makeAFRP prog2 >>= makeRunnable
@@ -51,4 +52,4 @@ main = do
     print out13
     print out23
 
--- [5,1], [6,4], 3, 7, 9, 14
+-- [5,1], [6,4], 3, 7, 10, 14
