@@ -30,12 +30,12 @@ class Fresh d fs d' fs' | d fs -> d' fs' where
     fresh :: BuildState fs -> Proxy d
         -> IO (Proxy d', BuildState fs')
 
-instance (n' ~ n + 1) =>
-    Fresh (V a) '(n, env) (VN n a) '(n', Rearrange.IOCell n a ': env) where
+instance (n' ~ n + 1, env' ~ Append (Rearrange.IOCell n a) env) =>
+    Fresh (V a) '(n, env) (VN n a) '(n', env') where
     fresh (MkBuildState ps) Proxy = do
         ref <- newIORef undefined
         let cell = Rearrange.Cell @_ @_ @IO ref
-        Prelude.return (Proxy, MkBuildState $ cell :+: ps)
+        Prelude.return (Proxy, MkBuildState $ hAppend @(Rearrange.IOCell n a) cell ps)
 
 instance (Fresh l fs lns fs', Fresh r fs' rns fs'') =>
     Fresh (P l r) fs (PN lns rns) fs'' where

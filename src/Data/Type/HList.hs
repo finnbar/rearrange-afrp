@@ -6,7 +6,7 @@
 
 module Data.Type.HList (
     HList(..),
-    hCombine, hHead, hTail,
+    hCombine, hHead, hTail, hAppend, Append,
     FlattenToHList,
     LookupNth(..)
     ) where
@@ -41,6 +41,14 @@ hHead (x :+: _) = x
 hTail :: HList (x ': xs) -> HList xs
 hTail (_ :+: xs) = xs
 
+type family Append x xs where
+    Append y '[] = '[y]
+    Append y (x ': xs) = x ': Append y xs
+
+hAppend :: x -> HList xs -> HList (Append x xs)
+hAppend y HNil = y :+: HNil
+hAppend y (x :+: xs) = x :+: hAppend y xs
+
 -- FlattenToHList, which removes a layer of nesting by using HLists.
 
 type family FlattenToHList (inp :: [[*]]) :: [*] where
@@ -50,8 +58,9 @@ type family FlattenToHList (inp :: [[*]]) :: [*] where
 class LookupNth n xs r | n xs -> r where
     lookupNth :: Proxy n -> HList xs -> r
 
-instance LookupNth 0 (x ': xs) x where
+instance {-# OVERLAPPING #-} LookupNth 0 (x ': xs) x where
     lookupNth Proxy (v :+: _) = v
 
-instance forall n x xs r. (LookupNth (n-1) xs r) => LookupNth n (x ': xs) r where
+instance {-# OVERLAPPABLE #-}
+    forall n x xs r. (LookupNth (n-1) xs r) => LookupNth n (x ': xs) r where
     lookupNth Proxy (_ :+: vs) = lookupNth (Proxy :: Proxy (n-1)) vs

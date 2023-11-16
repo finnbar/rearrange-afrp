@@ -84,11 +84,11 @@ class AsMemory arr a b env prog | arr a b env -> prog where
 instance AsMemory ArrowId a a env '[] where
     toProgram Id' prox _ = Prelude.return (HNil, prox)
 
-instance AsMemory ArrowDropL (PN a b) a env '[] where
-    toProgram DropL' prox _ = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
+instance AsMemory ArrowDropL (PN a b) b env '[] where
+    toProgram DropL' prox _ = let (_, br) = splitProx prox in Prelude.return (HNil, br)
 
-instance AsMemory ArrowDropR (PN a b) b env '[] where
-    toProgram DropR' prox _ = let (_, br) = splitProx prox in Prelude.return (HNil, br)
+instance AsMemory ArrowDropR (PN a b) a env '[] where
+    toProgram DropR' prox _ = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
 
 instance AsMemory ArrowDup a (PN a a) env '[] where
     toProgram Dup' prox _ = Prelude.return (HNil, pairProx prox prox)
