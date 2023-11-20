@@ -6,7 +6,8 @@
 
 module Data.Type.HList (
     HList(..),
-    hCombine, hHead, hTail, hAppend, Append,
+    hCombine, Combine,
+    hHead, hTail, hAppend, Append,
     FlattenToHList,
     LookupNth(..)
     ) where

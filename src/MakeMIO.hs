@@ -5,13 +5,12 @@ module MakeMIO where
 import Data.Type.HList
 
 import AFRP
+import Naming
 
 import Rearrange
 import Data.Memory.Types (MemState, MemoryPlus)
 import Data.Memory.Memory (MemoryInv)
-import Data.Type.Utils
 import Data.Kind (Constraint)
-import Data.Type.Set hiding (Proxy(..))
 import Data.Proxy
 
 type ReadCells :: forall (ar :: Arity). Desc' ar -> MemState -> Constraint
@@ -134,5 +133,24 @@ instance (AsMemory arr (PN a c) (PN b c) env prog) =>
             let (out, _) = splitProx prox'
             Prelude.return (comp, out)
 
-data CompiledAFRP (env :: [*]) (prog :: [*]) (a :: Desc' x) (b :: Desc' y) =
-    CAFRP (Set env) (HList prog) (Ref a) (Ref b)
+-- The output cell of a pre will always contain the _next_ value, since it is written at the end of each run
+-- through writeCellsAfter (this is needed to break the loop - we think of this as the pre preloading the next
+-- value to return).
+-- This means that if have the output cell of a pre as the output of the entire program, reading it will give
+-- us the _next_ value being returned, not the current one.
+-- We fix this by adding one separate output cell by postcomposing >>> arr id to the input.
+type Augment :: [*] -> Desc' a -> FreshState -> [*] -> Desc' a -> FreshState -> Constraint
+class Augment prog a bs prog' a' bs' | prog a bs -> prog' a' bs' where
+    augment :: HList prog -> Proxy a -> BuildState bs -> IO (HList prog', Proxy a', BuildState bs')
+
+instance forall a a' fs fs' read write prog prog'.
+    (Fresh (AsDesc a) fs a' fs',
+    ReadCells a read, WriteCells a' write,
+    MemoryInv read write,
+    AsDesc a ~ AsDesc a',
+    prog' ~ Append (MIO (MemoryPlus read write) ()) prog) =>
+    Augment prog a fs prog' a' fs' where
+        augment prog prox bs = do
+            (prox', bs') <- fresh bs (Proxy :: Proxy (AsDesc a))
+            let comp = readCells prox Rearrange.>>= writeCells prox'
+            Prelude.return (hAppend comp prog, prox', bs')

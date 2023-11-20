@@ -1,7 +1,7 @@
 {-# LANGUAGE FunctionalDependencies, UndecidableInstances, ScopedTypeVariables #-}
 
 module Naming (AssignMemory(..), newBuildState, EmptyFreshState, Fresh(..),
-    BuildState(..), EnvFromBuildState) where
+    BuildState(..), EnvFromBuildState, FreshState) where
 
 -- AssignMemory transforms an AFRP into an AFRP'.
 
