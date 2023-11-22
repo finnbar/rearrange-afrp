@@ -109,6 +109,6 @@ data AFRP' arrow a b where
     -- Arrows
     Arr' :: (Val (AsDesc a) -> Val (AsDesc b)) -> AFRP' ArrowArr a b
     Pre' :: Val (AsDesc a') -> AFRP' ArrowPre a a'
-    (:>>>>:) :: AFRP' ar a b -> AFRP' ar' b c -> AFRP' (ArrowGGG ar ar' b) a c
-    (:****:) :: AFRP' ar a b -> AFRP' ar' a' b' -> AFRP' (ArrowSSS ar ar') (PN a a') (PN b b')
+    (:>>>::) :: AFRP' ar a b -> AFRP' ar' b c -> AFRP' (ArrowGGG ar ar' b) a c
+    (:***::) :: AFRP' ar a b -> AFRP' ar' a' b' -> AFRP' (ArrowSSS ar ar') (PN a a') (PN b b')
     Loop' :: AFRP' ar (PN a c) (PN b c) -> AFRP' (ArrowLoop ar c) a b

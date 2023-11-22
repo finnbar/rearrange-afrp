@@ -88,7 +88,7 @@ instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' 
     assignMemory (f :>>>: g) prox bs = do
         (f', prox', bs') <- assignMemory f prox bs
         (g', prox'', bs'') <- assignMemory g prox' bs'
-        return (f' :>>>>: g', prox'', bs'')
+        return (f' :>>>:: g', prox'', bs'')
 
 instance (AssignMemory arrl a c arrl' a' c' fs fs',
     AssignMemory arrr b d arrr' b' d' fs' fs'') =>
@@ -195,7 +195,7 @@ instance (b ~ Subst a sub, b' ~ Subst a' sub, AsDesc a ~ AsDesc b, AsDesc a' ~ A
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr b c arrr' b' c' sub) =>
     Substitute (ArrowGGG arrl arrr b) a c (ArrowGGG arrl' arrr' b') a' c' sub where
-    substitute (f :>>>>: g) sub = substitute f sub :>>>>: substitute g sub
+    substitute (f :>>>:: g) sub = substitute f sub :>>>:: substitute g sub
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr c d arrr' c' d' sub) =>
     Substitute (ArrowSSS arrl arrr) (PN a c) (PN b d) (ArrowSSS arrl' arrr') (PN a' c') (PN b' d') sub where

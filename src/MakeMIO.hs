@@ -112,7 +112,7 @@ instance (ReadCells a ar, WriteCellsAfter a' ar', AsDesc a' ~ AsDesc a,
 instance (AsMemory larr a b env progl, AsMemory rarr b c env progr,
     prog ~ Combine progl progr) =>
     AsMemory (ArrowGGG larr rarr b) a c env prog where
-        toProgram (f :>>>>: g) inprox env = do
+        toProgram (f :>>>:: g) inprox env = do
             (compf, midprox) <- toProgram f inprox env
             (compg, outprox) <- toProgram g midprox env
             Prelude.return (hCombine compf compg, outprox)
