@@ -98,7 +98,7 @@ instance (AssignMemory arrl a c arrl' a' c' fs fs',
         let (lp, rp) = splitProx prox
         (f', lp', bs') <- assignMemory f lp bs
         (g', rp', bs'') <- assignMemory g rp bs'
-        return (f' :****: g', pairProx lp' rp', bs'')
+        return (f' :***:: g', pairProx lp' rp', bs'')
 
 -- For loops:
 -- Make Fresh variables for the second input, use them to get the second output and then unify.
@@ -199,7 +199,7 @@ instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr b c arrr' b' c' s
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr c d arrr' c' d' sub) =>
     Substitute (ArrowSSS arrl arrr) (PN a c) (PN b d) (ArrowSSS arrl' arrr') (PN a' c') (PN b' d') sub where
-    substitute (f :****: g) sub = substitute f sub :****: substitute g sub
+    substitute (f :***:: g) sub = substitute f sub :***:: substitute g sub
 
 instance (Substitute arr (PN a c) (PN b c) arr' (PN a' c') (PN b' c') sub) =>
     Substitute (ArrowLoop arr c) a b (ArrowLoop arr' c') a' b' sub where

@@ -120,7 +120,7 @@ instance (AsMemory larr a b env progl, AsMemory rarr b c env progr,
 instance (AsMemory larr la lb env progl, AsMemory rarr ra rb env progr,
     prog ~ Combine progl progr) =>
     AsMemory (ArrowSSS larr rarr) (PN la ra) (PN lb rb) env prog where
-        toProgram (f :****: g) prox env = do
+        toProgram (f :***:: g) prox env = do
             let (inl, inr) = splitProx prox
             (compf, outl) <- toProgram f inl env
             (compg, outr) <- toProgram g inr env
