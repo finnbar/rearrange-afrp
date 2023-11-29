@@ -12,7 +12,7 @@ prog1 :: AFRP _ (V Int) (P (V Int) (V Int))
 prog1 = arr1 :>>>: (Arr (\(One x) -> One (x + 1)) :***: Pre (One 1)) :>>>: Arr id
 
 prog1Run :: IO (Val (V Int) -> IO (Val (P (V Int) (V Int))))
-prog1Run = makeAFRP prog1 >>= makeRunnable
+prog1Run = makeAFRP prog1
 
 arr2 :: AFRP _ (P (V Int) (V Int)) (P (V Int) (V Int))
 arr2 = Arr (\(Pair (One x) (One y)) -> let z = x + y in Pair (One z) (One z))
@@ -21,7 +21,7 @@ prog2 :: AFRP _ (V Int) (V Int)
 prog2 = Loop (arr2 :>>>: (Id :***: Pre (One 0))) :>>>: Arr id
 
 prog2Run :: IO (Val (V Int) -> IO (Val (V Int)))
-prog2Run = makeAFRP prog2 >>= makeRunnable
+prog2Run = makeAFRP prog2
 
 arr3 :: AFRP _ (P (V Int) (V Int)) (V Int)
 arr3 = Arr (\(Pair (One x) (One y)) -> One $ x + y)
@@ -30,7 +30,7 @@ prog3 :: AFRP _ (V Int) (V Int)
 prog3 = arr1 :>>>: Dup :>>>: (arr2 :***: Pre (Pair (One 1) (One 2))) :>>>: (DropL :***: DropL) :>>>: arr3
 
 prog3Run :: IO (Val (V Int) -> IO (Val (V Int)))
-prog3Run = makeAFRP prog3 >>= makeRunnable
+prog3Run = makeAFRP prog3
 
 main :: IO ()
 main = do
