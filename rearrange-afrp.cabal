@@ -74,6 +74,7 @@ library
       TypeApplications
       FlexibleContexts
       TemplateHaskell
+      QuasiQuotes
       PartialTypeSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type
   build-depends:
@@ -111,6 +112,7 @@ executable rearrange-afrp-exe
       TypeApplications
       FlexibleContexts
       TemplateHaskell
+      QuasiQuotes
       PartialTypeSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -threaded -rtsopts -with-rtsopts=-N
   build-depends:
@@ -150,6 +152,7 @@ test-suite rearrange-afrp-test
       TypeApplications
       FlexibleContexts
       TemplateHaskell
+      QuasiQuotes
       PartialTypeSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -threaded -rtsopts -with-rtsopts=-N
   build-depends:

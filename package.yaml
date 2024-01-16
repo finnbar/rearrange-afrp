@@ -47,6 +47,7 @@ default-extensions:
 - TypeApplications
 - FlexibleContexts
 - TemplateHaskell
+- QuasiQuotes
 - PartialTypeSignatures
 language: GHC2021
 
