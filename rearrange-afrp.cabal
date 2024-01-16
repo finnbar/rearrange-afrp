@@ -43,7 +43,6 @@ library
       Data.Type.Rearrangement
       Data.Type.TSort
       Data.Type.Utils
-      FromProc
       GenProc.BuildExp
       GenProc.Env
       GenProc.GeneralisedArrow
@@ -74,14 +73,22 @@ library
       ConstraintKinds
       TypeApplications
       FlexibleContexts
+      TemplateHaskell
+      PartialTypeSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type
   build-depends:
       base >=4.7 && <5
+    , containers
     , data-default
     , first-class-families
+    , haskell-src-exts
+    , haskell-src-exts-util
+    , haskell-src-meta
+    , megaparsec
     , monad-var
+    , template-haskell
     , type-level-sets
-  default-language: Haskell2010
+  default-language: GHC2021
 
 executable rearrange-afrp-exe
   main-is: Main.hs
@@ -89,15 +96,37 @@ executable rearrange-afrp-exe
       Paths_rearrange_afrp
   hs-source-dirs:
       app
+  default-extensions:
+      GADTs
+      MultiParamTypeClasses
+      DataKinds
+      PolyKinds
+      FlexibleInstances
+      BangPatterns
+      TypeFamilies
+      ExplicitForAll
+      StandaloneKindSignatures
+      TypeOperators
+      ConstraintKinds
+      TypeApplications
+      FlexibleContexts
+      TemplateHaskell
+      PartialTypeSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , data-default
     , first-class-families
+    , haskell-src-exts
+    , haskell-src-exts-util
+    , haskell-src-meta
+    , megaparsec
     , monad-var
     , rearrange-afrp
+    , template-haskell
     , type-level-sets
-  default-language: Haskell2010
+  default-language: GHC2021
 
 test-suite rearrange-afrp-test
   type: exitcode-stdio-1.0
@@ -106,12 +135,34 @@ test-suite rearrange-afrp-test
       Paths_rearrange_afrp
   hs-source-dirs:
       test
+  default-extensions:
+      GADTs
+      MultiParamTypeClasses
+      DataKinds
+      PolyKinds
+      FlexibleInstances
+      BangPatterns
+      TypeFamilies
+      ExplicitForAll
+      StandaloneKindSignatures
+      TypeOperators
+      ConstraintKinds
+      TypeApplications
+      FlexibleContexts
+      TemplateHaskell
+      PartialTypeSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , data-default
     , first-class-families
+    , haskell-src-exts
+    , haskell-src-exts-util
+    , haskell-src-meta
+    , megaparsec
     , monad-var
     , rearrange-afrp
+    , template-haskell
     , type-level-sets
-  default-language: Haskell2010
+  default-language: GHC2021

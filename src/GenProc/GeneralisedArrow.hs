@@ -37,12 +37,6 @@ instance (Show (Val a), Show (Val b)) => Show (Val (C a b)) where
     show (Choice1 a) = "(1 " ++ show a ++ ")"
     show (Choice2 a) = "(2 " ++ show a ++ ")"
 
-type AsTuple :: forall s. Desc s -> Type
-type family AsTuple desc where
-    AsTuple (V a) = a
-    AsTuple (P l r) = (AsTuple l, AsTuple r)
-    AsTuple (C a b) = Either (AsTuple a) (AsTuple b)
-
 type Arrow :: Arity -> Arity -> Type
 data Arrow ar ar' where
     ArrowId :: Arrow a a

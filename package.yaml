@@ -25,6 +25,30 @@ dependencies:
 - first-class-families
 - monad-var
 - data-default
+- haskell-src-exts
+- haskell-src-meta
+- haskell-src-exts-util
+- containers
+- megaparsec
+- template-haskell
+
+default-extensions:
+- GADTs
+- MultiParamTypeClasses
+- DataKinds
+- PolyKinds
+- FlexibleInstances
+- BangPatterns
+- TypeFamilies
+- ExplicitForAll
+- StandaloneKindSignatures
+- TypeOperators
+- ConstraintKinds
+- TypeApplications
+- FlexibleContexts
+- TemplateHaskell
+- PartialTypeSignatures
+language: GHC2021
 
 ghc-options:
 - -Wall
@@ -40,20 +64,6 @@ ghc-options:
 
 library:
   source-dirs: src
-  default-extensions:
-  - GADTs
-  - MultiParamTypeClasses
-  - DataKinds
-  - PolyKinds
-  - FlexibleInstances
-  - BangPatterns
-  - TypeFamilies
-  - ExplicitForAll
-  - StandaloneKindSignatures
-  - TypeOperators
-  - ConstraintKinds
-  - TypeApplications
-  - FlexibleContexts
 
 executables:
   rearrange-afrp-exe:

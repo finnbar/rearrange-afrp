@@ -1,34 +1,20 @@
-module AFRP where
+module AFRP (GenArrow(..), AFRP, Arrow(..), Desc(..), Val(..), Arity(..),
+    AFRP'(..), Arrow'(..), Desc'(..), Ref(..), AsDesc,
+    readRef, writeRef, splitProx, pairProx) where
 
 import Rearrange
 import GHC.TypeLits
 import Data.IORef (writeIORef, readIORef)
 import Data.Proxy
 
-data Arity where
-    O :: Arity
-    (:::) :: Arity -> Arity -> Arity
+import GenProc.GeneralisedArrow (Desc(..), Arrow(..), Val(..), Arity(..), GenArrow(..))
 
-type Desc :: Arity -> *
-data Desc x where
-    V :: forall (a :: *). a -> Desc O
-    P :: Desc a -> Desc b -> Desc (a ::: b)
+type AFRP = GenArrow
 
 type Desc' :: Arity -> *
 data Desc' ar where
     VN :: forall (a :: *). Nat -> a -> Desc' O
     PN :: Desc' l -> Desc' r -> Desc' (l ::: r)
-
-type Val :: forall s. Desc s -> *
-data Val x where
-    One :: !a -> Val (V a)
-    Pair :: !(Val a) -> !(Val b) -> Val (P a b)
-
-instance Show a => Show (Val (V a)) where
-    show (One a) = show a
-
-instance (Show (Val l), Show (Val r)) => Show (Val (P l r)) where
-    show (Pair l r) = "[|" ++ show l ++ ", " ++ show r ++ "|]"
 
 type Ref :: forall s. Desc' s -> *
 data Ref desc where
@@ -58,57 +44,34 @@ pairProx Proxy Proxy = Proxy
 -- This should allow full inference: assume we have a well-typed AFRP, then we transform to well-typed RAFRP,
 -- which can then be (possibly) implemented with rearrange.
 
-type Arrow :: (Arity -> *) -> Arity -> Arity -> *
-data Arrow desc ar ar' where
-    ArrowId :: Arrow desc a a
-    ArrowDropL :: Arrow desc (a ::: b) b
-    ArrowDropR :: Arrow desc (a ::: b) a
-    ArrowDup :: Arrow desc a (a ::: a)
-    ArrowArr :: Arrow desc a b
-    ArrowPre :: Arrow desc a a
-    ArrowGGG :: Arrow desc a b -> Arrow desc b c -> desc b -> Arrow desc a c
-    ArrowSSS :: Arrow desc a b -> Arrow desc a' b' -> Arrow desc (a ::: a') (b ::: b')
-    ArrowLoop :: Arrow desc (a ::: c) (b ::: c) -> desc c -> Arrow desc a b
-
--- Programmers will likely use :: AFRP _ a b in their code, since _ is entirely inferrable from the constructors.
--- We need it to implement an AFRP -> RAFRP function, as the type of the output cannot solely depend on the value of the input.
--- (That's dependent types innit.)
-type AFRP :: forall (ar :: Arity) (ar' :: Arity).
-    Arrow Desc ar ar' -> Desc ar -> Desc ar' -> *
-data AFRP arrow a b where
-    -- Routing
-    Id :: AFRP ArrowId a a
-    DropL :: AFRP ArrowDropL (P a b) b
-    DropR :: AFRP ArrowDropR (P a b) a
-    Dup :: AFRP ArrowDup a (P a a)
-    -- NB Swap = Dup >>> (DropL *** DropR)
-    -- Assoc = Dup >>> ((Id *** DropR) *** (DropL >>> DropL))
-    -- Unassoc = Dup >>> ((DropR >>> DropR) *** (DropL *** Id))
-    -- Thus we only need Drop and Dup.
-
-    -- Arrows
-    Arr :: (Val a -> Val b) -> AFRP ArrowArr a b
-    Pre :: Val a -> AFRP ArrowPre a a
-    (:>>>:) :: AFRP ar a b -> AFRP ar' b c -> AFRP (ArrowGGG ar ar' b) a c
-    (:***:) :: AFRP ar a b -> AFRP ar' a' b' -> AFRP (ArrowSSS ar ar') (P a a') (P b b')
-    Loop :: AFRP ar (P a c) (P b c) -> AFRP (ArrowLoop ar c) a b
+type Arrow' :: Arity -> Arity -> *
+data Arrow' ar ar' where
+    ArrowId' :: Arrow' a a
+    ArrowDropL' :: Arrow' (a ::: b) b
+    ArrowDropR' :: Arrow' (a ::: b) a
+    ArrowDup' :: Arrow' a (a ::: a)
+    ArrowArr' :: Arrow' a b
+    ArrowPre' :: Arrow' a a
+    ArrowGGG' :: Arrow' a b -> Arrow' b c -> Desc' b -> Arrow' a c
+    ArrowSSS' :: Arrow' a b -> Arrow' a' b' -> Arrow' (a ::: a') (b ::: b')
+    ArrowLoop' :: Arrow' (a ::: c) (b ::: c) -> Desc' c -> Arrow' a b
 
 type AFRP' :: forall (ar :: Arity) (ar' :: Arity).
-    Arrow Desc' ar ar' -> Desc' ar -> Desc' ar' -> *
+    Arrow' ar ar' -> Desc' ar -> Desc' ar' -> *
 data AFRP' arrow a b where
     -- Routing
-    Id' :: AFRP' ArrowId a a
-    DropL' :: AFRP' ArrowDropL (PN a b) b
-    DropR' :: AFRP' ArrowDropR (PN a b) a
-    Dup' :: AFRP' ArrowDup a (PN a a)
+    Id' :: AFRP' ArrowId' a a
+    DropL' :: AFRP' ArrowDropL' (PN a b) b
+    DropR' :: AFRP' ArrowDropR' (PN a b) a
+    Dup' :: AFRP' ArrowDup' a (PN a a)
     -- NB Swap = Dup >>> (DropL *** DropR)
     -- Assoc = Dup >>> ((Id *** DropR) *** (DropL >>> DropL))
     -- Unassoc = Dup >>> ((DropR >>> DropR) *** (DropL *** Id))
     -- Thus we only need Drop and Dup.
 
     -- Arrows
-    Arr' :: (Val (AsDesc a) -> Val (AsDesc b)) -> AFRP' ArrowArr a b
-    Pre' :: Val (AsDesc a') -> AFRP' ArrowPre a a'
-    (:>>>::) :: AFRP' ar a b -> AFRP' ar' b c -> AFRP' (ArrowGGG ar ar' b) a c
-    (:***::) :: AFRP' ar a b -> AFRP' ar' a' b' -> AFRP' (ArrowSSS ar ar') (PN a a') (PN b b')
-    Loop' :: AFRP' ar (PN a c) (PN b c) -> AFRP' (ArrowLoop ar c) a b
+    Arr' :: (Val (AsDesc a) -> Val (AsDesc b)) -> AFRP' ArrowArr' a b
+    Pre' :: Val (AsDesc a') -> AFRP' ArrowPre' a a'
+    (:>>>::) :: AFRP' ar a b -> AFRP' ar' b c -> AFRP' (ArrowGGG' ar ar' b) a c
+    (:***::) :: AFRP' ar a b -> AFRP' ar' a' b' -> AFRP' (ArrowSSS' ar ar') (PN a a') (PN b b')
+    Loop' :: AFRP' ar (PN a c) (PN b c) -> AFRP' (ArrowLoop' ar c) a b
