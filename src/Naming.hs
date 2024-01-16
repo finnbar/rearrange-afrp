@@ -142,30 +142,23 @@ instance (sub ~ ToSubstitution c d,
 -- output agree.
 -- Simple explanation: by substituting large for small, we guarantee to only be touching names
 -- generated within the loop.
-type Substitution :: Arity -> *
-data Substitution ar where
-    SingleSub :: Nat -> Nat -> Substitution O
-    PairSub :: Substitution l -> Substitution r -> Substitution (l ::: r)
+data Substitution = Sub Nat Nat
 
-type ToSubstitution :: Desc' d -> Desc' d -> Substitution d
+type ToSubstitution :: Desc' d -> Desc' d -> [Substitution]
 type family ToSubstitution d d' where
-    ToSubstitution (PN l r) (PN l' r') = PairSub (ToSubstitution l l') (ToSubstitution r r')
-    ToSubstitution (VN n a) (VN n' a) = If (n <=? n') (SingleSub n n') (SingleSub n' n)
+    ToSubstitution (PN l r) (PN l' r') = Combine (ToSubstitution l l') (ToSubstitution r r')
+    ToSubstitution (VN n a) (VN n' a) = If (n <=? n') '[Sub n n'] '[Sub n' n]
 
-type Subst :: Desc' a -> Substitution b -> Desc' a
+type ApplySub :: Desc' a -> Substitution -> Desc' a
+type family ApplySub n sub where
+    ApplySub (PN l r) sub = PN (ApplySub l sub) (ApplySub r sub)
+    ApplySub (VN n a) (Sub n' n) = VN n' a
+    ApplySub (VN n a) (Sub x y)  = VN n a
+
+type Subst :: Desc' a -> [Substitution] -> Desc' a
 type family Subst x sub where
-    -- If your input is a pair, apply subst to the components
-    Subst (PN l r) sub = PN (Subst l sub) (Subst r sub)
-    -- Once your input is not a pair, if you have a match then 
-    -- apply the substitution.
-    -- We substitute large for small: SingleSub n' n => n' < n,
-    -- so replacing n with n' shrinks the value.
-    Subst (VN n a) (SingleSub n' n) = VN n' a
-    -- If your matching targets are pairs, try each substitution
-    -- in turn.
-    Subst (VN n a) (PairSub l r) = Subst (Subst (VN n a) l) r
-    -- If a substitution doesn't work, then don't substitute.
-    Subst (VN n a) (SingleSub n' n'') = VN n a
+    Subst desc (sub : xs) = Subst (ApplySub desc sub) xs
+    Subst desc '[] = desc
 
 class Substitute arr a b arr' a' b' sub | arr a b sub -> arr' a' b' where
     substitute :: AFRP' arr a b -> Proxy sub -> AFRP' arr' a' b'
