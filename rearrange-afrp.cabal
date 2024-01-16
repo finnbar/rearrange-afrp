@@ -43,6 +43,14 @@ library
       Data.Type.Rearrangement
       Data.Type.TSort
       Data.Type.Utils
+      FromProc
+      GenProc.BuildExp
+      GenProc.Env
+      GenProc.GeneralisedArrow
+      GenProc.Optimise
+      GenProc.PairPattern
+      GenProc.ProcTH
+      GenProc.TransformProc
       MakeMIO
       MonadRW
       Naming
