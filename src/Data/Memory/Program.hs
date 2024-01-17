@@ -7,12 +7,12 @@
 module Data.Memory.Program (
     ParallelProgram, Program, makeProgram, makeParallelProgram,
     runProgram, runParallelProgram, runProgram_, makeProgramInters,
-    MakeProgConstraints, RunMems_
+    MakeProgConstraints, RunMems_, CompileMems_, compileProgram_
     -- runParallelProgramPartial, runProgramPartial
 ) where
 
 import Data.Memory.Types (Set, Memory, CellUpdate, NoConflicts_) 
-import Data.Memory.RunMemory ({-RunPartialMems(..),-} RunMems(..), RunMems_(..))
+import Data.Memory.RunMemory ({-RunPartialMems(..),-} RunMems(..), RunMems_(..), CompileMems_(..))
 import Data.Memory.RunMemoryConc
 import Data.Type.TSort (ordered, OrderedConstraints)
 import Data.Type.ComponentSearch (toSortedComponents, SortedComponentsConstraints)
@@ -60,6 +60,10 @@ runProgram (Program Prog {..}) = runMems mems env
 runProgram_ :: RunMems_ m xs env =>
     Program xs env -> m ()
 runProgram_ (Program Prog {..}) = runMems_ mems env
+
+compileProgram_ :: CompileMems_ xs env =>
+    Program xs env -> IO (IO ())
+compileProgram_ (Program Prog {..}) = compileMems_ mems env
 
 -- runProgramPartial :: RunPartialMems m xs env =>
 --     Program xs env -> [CellUpdate] -> m ()

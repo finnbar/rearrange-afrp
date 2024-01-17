@@ -21,7 +21,7 @@ makeAFRP :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' env'' prog' 
     Sortable env', Nubable (Sort env'),
     AsDesc a' ~ a, AsDesc b'' ~ b,
     env'' ~ AsSet env',
-    MakeProgConstraints prog' prog'' env'', RunMems_ IO prog'' env'') =>
+    MakeProgConstraints prog' prog'' env'', CompileMems_ prog'' env'') =>
     AFRP arr a b -> IO (Val a -> IO (Val b))
 makeAFRP afrp = do
     (inprox, bs) <- fresh @_ @a newBuildState (Proxy :: Proxy a)
@@ -31,9 +31,10 @@ makeAFRP afrp = do
     let inref = proxToRef inprox env'
         outref = proxToRef outprox'' env'
     program <- makeProgram prog' (hlistToSet env')
+    runner <- compileProgram_ program
     Prelude.return $ \inp -> do
         writeRef inref inp
-        runProgram_ program
+        runner
         readRef outref
 
 hlistToSet :: (Sortable xs, Nubable (Sort xs)) => HList xs -> Set (AsSet xs)
