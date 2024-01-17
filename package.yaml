@@ -31,6 +31,7 @@ dependencies:
 - containers
 - megaparsec
 - template-haskell
+- hedgehog
 
 default-extensions:
 - GADTs
@@ -64,7 +65,9 @@ ghc-options:
 - -Wno-star-is-type
 
 library:
-  source-dirs: src
+  source-dirs:
+  - src
+  - gen
 
 executables:
   rearrange-afrp-exe:
@@ -80,7 +83,9 @@ executables:
 tests:
   rearrange-afrp-test:
     main:                Spec.hs
-    source-dirs:         test
+    source-dirs:
+    - gen
+    - test
     ghc-options:
     - -threaded
     - -rtsopts

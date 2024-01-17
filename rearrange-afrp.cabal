@@ -55,10 +55,12 @@ library
       Naming
       RAFRP
       Rearrange
+      GenerateProcCode
   other-modules:
       Paths_rearrange_afrp
   hs-source-dirs:
       src
+      gen
   default-extensions:
       GADTs
       MultiParamTypeClasses
@@ -85,6 +87,7 @@ library
     , haskell-src-exts
     , haskell-src-exts-util
     , haskell-src-meta
+    , hedgehog
     , megaparsec
     , monad-var
     , template-haskell
@@ -123,6 +126,7 @@ executable rearrange-afrp-exe
     , haskell-src-exts
     , haskell-src-exts-util
     , haskell-src-meta
+    , hedgehog
     , megaparsec
     , monad-var
     , rearrange-afrp
@@ -134,8 +138,10 @@ test-suite rearrange-afrp-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      GenerateProcCode
       Paths_rearrange_afrp
   hs-source-dirs:
+      gen
       test
   default-extensions:
       GADTs
@@ -163,6 +169,7 @@ test-suite rearrange-afrp-test
     , haskell-src-exts
     , haskell-src-exts-util
     , haskell-src-meta
+    , hedgehog
     , megaparsec
     , monad-var
     , rearrange-afrp
