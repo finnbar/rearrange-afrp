@@ -79,6 +79,20 @@ data GenArrow arrow a b where
     Loop :: GenArrow ar (P a c) (P b c) -> GenArrow (ArrowLoop ar c) a b
     (:+++:) :: GenArrow ar a b -> GenArrow ar' c d -> GenArrow (ArrowPPP ar ar') (C a c) (C b d)
 
+instance Show (GenArrow ar a b) where
+    show Id = "Id"
+    show DropL = "DropL"
+    show DropR = "DropR"
+    show Dup = "Dup"
+    show (Constant _) = "Constant"
+    show (Arr _) = "Arr"
+    show (Pre _) = "Pre"
+    show (f :>>>: g) = "(" ++ show f ++ ") >>> (" ++ show g ++ ")"
+    show (f :***: g) = show f ++ " *** " ++ show g
+    show App = "App"
+    show (Loop f) = "Loop " ++ show f
+    show (f :+++: g) = "(" ++ show f ++ ") +++ (" ++ show g ++ ")"
+
 -- Bringing the constructors into scope to override the Control.Arrow constructors.
 -- This might eventually be overloaded with a class.
 

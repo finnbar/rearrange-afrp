@@ -16,65 +16,74 @@ import Unsafe.Coerce
 coerceGenArrow :: GenArrow ar a b -> GenArrow ar' a b
 coerceGenArrow = unsafeCoerce
 
-type CombineArr :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
-type family CombineArr x y desc where
-    CombineArr ArrowArr ArrowArr _ = ArrowArr
-    CombineArr ArrowDup ArrowDropL _ = ArrowId
-    CombineArr ArrowDup ArrowDropR _ = ArrowId
-    CombineArr ar ArrowConst _ = ArrowConst
-    CombineArr (ArrowSSS arl arr) (ArrowSSS arl' arr') (P l r) =
-        ArrowSSS (CombineArr arl arl' l) (CombineArr arr arr' r)
-    CombineArr ar ArrowId _ = ar
-    CombineArr ArrowId ar _ = ar
-    CombineArr (ArrowGGG arx ary b) arz b' = CombineArrCont (CombineArr arx ary b) arz b'
-    CombineArr arx (ArrowGGG ary arz b') b = CombineArrCont' arx (CombineArr ary arz b') b
-    CombineArr ar ar' b = ArrowGGG ar ar' b
+type Optimise :: Arrow a b -> Arrow a b
+type family Optimise arr where
+    Optimise ArrowId = ArrowId
+    Optimise ArrowDropL = ArrowDropL
+    Optimise ArrowDropR = ArrowDropR
+    Optimise ArrowDup = ArrowDup
+    Optimise ArrowConst = ArrowConst
+    Optimise ArrowArr = ArrowArr
+    Optimise ArrowPre = ArrowPre
+    Optimise (ArrowGGG l r b) = OptimiseComp (Optimise l) (Optimise r) b
+    Optimise (ArrowSSS l r) = OptimisePair (Optimise l) (Optimise r)
+    Optimise ArrowApp = ArrowApp
+    Optimise (ArrowLoop ar c) = ArrowLoop (Optimise ar) c
+    Optimise (ArrowPPP l r) = OptimiseChoice (Optimise l) (Optimise r)
 
-type CombineArrCont :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
-type family CombineArrCont x y desc where
-    CombineArrCont (ArrowGGG arx ary b) arz b' = ArrowGGG arx (CombineArr ary arz b') b
-    CombineArrCont ar arz b' = CombineArr ar arz b'
+-- Going through each combinator in turn, even if it remains unchanged.
+optimise :: GenArrow ar a b -> GenArrow (Optimise ar) a b
+optimise Id = Id
+optimise DropL = DropL
+optimise DropR = DropR
+optimise Dup = Dup
+optimise (Constant c) = Constant c
+optimise (Arr f) = Arr f
+optimise (Pre v) = Pre v
+optimise (f :>>>: g) = optimiseComp (optimise f) (optimise g)
+optimise (f :***: g) = optimisePair (optimise f) (optimise g)
+optimise App = App
+optimise (Loop f) = Loop (optimise f)
+optimise (f :+++: g) = optimiseChoice (optimise f) (optimise g)
 
-type CombineArrCont' :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
-type family CombineArrCont' x y desc where
-    CombineArrCont' arx (ArrowGGG ary arz b') b = ArrowGGG (CombineArr arx ary b) arz b'
-    CombineArrCont' ar arz b' = CombineArr ar arz b'
+type OptimiseComp :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
+type family OptimiseComp ar ar' desc where
+    OptimiseComp ArrowArr ArrowArr _ = ArrowArr
+    OptimiseComp ArrowDup ArrowDropL _ = ArrowId
+    OptimiseComp ArrowDup ArrowDropR _ = ArrowId
+    OptimiseComp _ ArrowConst _ = ArrowConst
+    OptimiseComp ar ArrowId _ = ar
+    OptimiseComp ArrowId ar _ = ar
+    OptimiseComp ar ar' b = ArrowGGG ar ar' b
 
-optimiseComp :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (CombineArr ar ar' b) a c
+optimiseComp :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (OptimiseComp ar ar' b) a c
 optimiseComp (Arr f) (Arr g) = Arr (g . f)
 optimiseComp Dup DropL = Id
 optimiseComp Dup DropR = Id
 optimiseComp _ (Constant c) = Constant c
-optimiseComp (f :***: g) (f' :***: g') = optimiseComp f f' :***: optimiseComp g g'
 optimiseComp f Id = f
 optimiseComp Id f = f
--- Relies on knowledge that h !~ Id or Constant.
--- We know this since we have a case for those above, even if Haskell fails to spot it.
--- Therefore, we use unsafeCoerce.
-optimiseComp (f :>>>: g) h = coerceGenArrow $ optimiseCompCont (optimiseComp f g) h
-optimiseComp f (g :>>>: h) = coerceGenArrow $ optimiseCompCont' f (optimiseComp g h)
--- Relies on knowledge that none of our other cases apply.
+-- It cannot be any case of OptimiseComp except the last, so we can safely coerce.
 optimiseComp f g = coerceGenArrow $ f :>>>: g
 
-optimiseCompCont :: GenArrow ar a b -> GenArrow ar' b c
-    -> GenArrow (CombineArrCont ar ar' b) a c
-optimiseCompCont (f :>>>: g) h = f :>>>: optimiseComp g h
--- Again, to avoid enumerating cases.
-optimiseCompCont fg h = coerceGenArrow $ optimiseComp fg h
+type OptimisePair :: Arrow a b -> Arrow a' b' -> Arrow (a ::: a') (b ::: b')
+type family OptimisePair ar ar' where
+    OptimisePair ArrowId ArrowId = ArrowId
+    OptimisePair ArrowPre ArrowPre = ArrowPre
+    OptimisePair ar ar' = ArrowSSS ar ar'
 
-optimiseCompCont' :: GenArrow ar a b -> GenArrow ar' b c
-    -> GenArrow (CombineArrCont' ar ar' b) a c
-optimiseCompCont' f (g :>>>: h) = optimiseComp f g :>>>: h
--- Again, to avoid enumerating cases.
-optimiseCompCont' f gh = coerceGenArrow $ optimiseComp f gh
+optimisePair :: GenArrow ar a b -> GenArrow ar' a' b'
+    -> GenArrow (OptimisePair ar ar') (P a a') (P b b')
+optimisePair Id Id = Id
+optimisePair (Pre v) (Pre w) = Pre (Pair v w)
+optimisePair l r = coerceGenArrow $ l :***: r
 
-type Optimise :: Arrow a b -> Arrow a b
-type family Optimise ar where
-    Optimise (ArrowGGG ar ar' b) = CombineArr ar ar' b
-    Optimise (ArrowSSS ar ar') = ArrowSSS (Optimise ar) (Optimise ar')
-    Optimise ar = ar
+type OptimiseChoice :: Arrow a b -> Arrow a' b' -> Arrow (a :?: a') (b :?: b')
+type family OptimiseChoice ar ar' where
+    OptimiseChoice ArrowId ArrowId = ArrowId
+    OptimiseChoice ar ar' = ArrowPPP ar ar'
 
-optimise :: GenArrow ar a b -> GenArrow (Optimise ar) a b
-optimise (f :>>>: g) = optimiseComp f g
-optimise (f :***: g) = optimise f :***: optimise g
-optimise ar = coerceGenArrow ar
+optimiseChoice :: GenArrow ar a b -> GenArrow ar' a' b'
+    -> GenArrow (OptimiseChoice ar ar') (C a a') (C b b')
+optimiseChoice Id Id = Id
+optimiseChoice l r = coerceGenArrow $ l :+++: r
