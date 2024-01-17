@@ -2,7 +2,6 @@
 
 module Main (main) where
 
--- TODO: GeneralisedArrow import is needed because of proc's reliance on qualified modules. Try to avoid?
 import RAFRP
 import GenProc.GeneralisedArrow
 import GenProc.ProcTH (gap)
@@ -10,9 +9,8 @@ import GenProc.ProcTH (gap)
 arr1 :: AFRP _ (V Int) (P (V Int) (V Int))
 arr1 = Arr (\(One x) -> let y = x + 1 in Pair (One y) (One y))
 
--- NOTE: The Arr id are added to avoid the Pre bug. The bug still needs fixing.
 prog1 :: AFRP _ (V Int) (P (V Int) (V Int))
-prog1 = arr1 :>>>: (Arr (\(One x) -> One (x + 1)) :***: Pre (One 1)) :>>>: Arr Prelude.id
+prog1 = arr1 :>>>: (Arr (\(One x) -> One (x + 1)) :***: Pre (One 1))
 
 prog1Run :: IO (Val (V Int) -> IO (Val (P (V Int) (V Int))))
 prog1Run = makeAFRP prog1
@@ -21,7 +19,7 @@ arr2 :: AFRP _ (P (V Int) (V Int)) (P (V Int) (V Int))
 arr2 = Arr (\(Pair (One x) (One y)) -> let z = x + y in Pair (One z) (One z))
 
 prog2 :: AFRP _ (V Int) (V Int)
-prog2 = Loop (arr2 :>>>: (Id :***: Pre (One 0))) :>>>: Arr Prelude.id
+prog2 = Loop (arr2 :>>>: (Id :***: Pre (One 0)))
 
 prog2Run :: IO (Val (V Int) -> IO (Val (V Int)))
 prog2Run = makeAFRP prog2

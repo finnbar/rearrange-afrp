@@ -152,32 +152,32 @@ returnA = Id
 
 runGenArrow :: GenArrow ar a b -> [Val a] -> [Val b]
 runGenArrow _ [] = []
-runGenArrow ga (a : as) = let
-    (b, ga') = run ga a
-    in b : runGenArrow ga' as
-
-run :: GenArrow ar a b -> Val a -> (Val b, GenArrow ar a b)
-run Id a = (a, Id)
-run DropL (Pair _ b) = (b, DropL)
-run DropR (Pair a _) = (a, DropR)
-run Dup a = (Pair a a, Dup)
-run (Constant v) _ = (v, Constant v)
-run (Arr f) a = (f a, Arr f)
-run (Pre v) v' = (v, Pre v')
-run (f :>>>: g) a = let
-    (c, f') = run f a
-    (b, g') = run g c
-    in (b, f' :>>>: g')
-run (f :***: g) (Pair a b) = let
-    (a', f') = run f a
-    (b', g') = run g b
-    in (Pair a' b', f' :***: g')
-run App (Pair (One f) x) = let
-    (c, _) = run f x
-    in (c, App)
-run (Loop f) a =
-    let (Pair b c, f') = run f (Pair a c) in (b, Loop f')
-run (f :+++: g) (Choice1 a) =
-    let (a', f') = run f a in (Choice1 a', f' :+++: g)
-run (f :+++: g) (Choice2 b) =
-    let (b', g') = run g b in (Choice2 b', f :+++: g')
+runGenArrow ga (x : xs) = let
+    (y, ga') = run ga x
+    in y : runGenArrow ga' xs
+    where
+        run :: GenArrow ar a b -> Val a -> (Val b, GenArrow ar a b)
+        run Id a = (a, Id)
+        run DropL (Pair _ b) = (b, DropL)
+        run DropR (Pair a _) = (a, DropR)
+        run Dup a = (Pair a a, Dup)
+        run (Constant v) _ = (v, Constant v)
+        run (Arr f) a = (f a, Arr f)
+        run (Pre v) v' = (v, Pre v')
+        run (f :>>>: g) a = let
+            (c, f') = run f a
+            (b, g') = run g c
+            in (b, f' :>>>: g')
+        run (f :***: g) (Pair a b) = let
+            (a', f') = run f a
+            (b', g') = run g b
+            in (Pair a' b', f' :***: g')
+        run App (Pair (One f) x) = let
+            (c, _) = run f x
+            in (c, App)
+        run (Loop f) a =
+            let (Pair b c, f') = run f (Pair a c) in (b, Loop f')
+        run (f :+++: g) (Choice1 a) =
+            let (a', f') = run f a in (Choice1 a', f' :+++: g)
+        run (f :+++: g) (Choice2 b) =
+            let (b', g') = run g b in (Choice2 b', f :+++: g')

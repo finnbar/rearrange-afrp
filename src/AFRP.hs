@@ -1,4 +1,4 @@
-module AFRP (GenArrow(..), AFRP, Arrow(..), Desc(..), Val(..), Arity(..),
+module AFRP (AFRP, module GenProc.GeneralisedArrow,
     AFRP'(..), Arrow'(..), Desc'(..), Ref(..), AsDesc,
     readRef, writeRef, splitProx, pairProx) where
 
