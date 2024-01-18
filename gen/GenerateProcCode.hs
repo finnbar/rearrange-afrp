@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 module GenerateProcCode (generateProcCode) where
 
 import Hedgehog hiding (Var)
@@ -8,6 +6,7 @@ import qualified Hedgehog.Range as Range
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Control.Monad
 
 -- Proc code consists of some number of lines of code and then a numbered Var
 data ProcCode = PC [Line] SingleVar
@@ -15,35 +14,67 @@ data ProcCode = PC [Line] SingleVar
 -- Each line is vj <- op -< vs, where j is the line number and vs are the input(s).
 -- e.g. Pre v vl vr === vr <- pre v -< vl.
 data Line = Pre Int SingleVar SingleVar | Add PairVar SingleVar | Sub PairVar SingleVar
-    | Mul PairVar SingleVar | Div PairVar SingleVar | Inc SingleVar SingleVar
+    | Mul PairVar SingleVar | Div PairVar SingleVar | Inc SingleVar SingleVar | RecLine [Line]
     deriving (Show)
 -- Ints are used to represent vars, with variable i being called v_i.
 type Var = Int
 type SingleVar = Var
 type PairVar = (Var, Var)
-data InputShape = ShapeSV | ShapePV
+data InputShape = ShapeSV | ShapePV | RecStmt Int [InputShape]
 
 data VarSet = VS {
-    unused :: Set Int,
-    used :: Set Int,
+    unused :: Set Var,
+    used :: Set Var,
     repeatsAllowed :: Int }
 
+-- Repeats allowed is simply the number of input slots minus the number of output
+-- ones, as we need to use every output variable at least once as an input.
 defaultVarSet :: [InputShape] -> VarSet
-defaultVarSet inps = VS (Set.singleton 0) Set.empty (varsLeft inps - length inps)
+defaultVarSet inps = VS (Set.singleton 0) Set.empty (varsLeft inps - newVars inps)
 
--- Given a list of InputShape, give us the number of slots left for variables.
+-- Given a list of InputShape, give us the number of times we will need an input.
+-- Lines with single inputs count as one, pairs count as two and Rec k is counts
+-- as k + the number of vars inside.
 varsLeft :: [InputShape] -> Int
-varsLeft [] = 0
-varsLeft (ShapePV : ss) = 2 + varsLeft ss
-varsLeft (ShapeSV : ss) = 1 + varsLeft ss
+varsLeft = sum . map numVars
+    where
+        numVars :: InputShape -> Int
+        numVars ShapePV = 2
+        numVars ShapeSV = 1
+        numVars (RecStmt k is) = k + varsLeft is
 
-generateProcCode :: Int -> Gen ProcCode
-generateProcCode len = do
-    -- We first generate the number of inputs that each line will consume.
-    -- We use this later to make sure that every variable is used at least once.
-    inps <- Gen.list (Range.singleton len) $ Gen.choice [return ShapeSV, return ShapePV]
-    (lines, VS unused _ _) <- genLines (defaultVarSet inps) inps 1
-    return $ PC lines (Set.elemAt 0 unused)
+-- Given a list of InputShape, give us the number of times we make a new output.
+-- That is, this is the number of variables we define.
+newVars :: [InputShape] -> Int
+newVars = sum . map numVars
+    where
+        numVars :: InputShape -> Int
+        numVars ShapePV = 1
+        numVars ShapeSV = 1
+        numVars (RecStmt k is) = k + newVars is
+
+-- Take total length and rec length, and generate the corresponding input shape.
+generateInputShapes :: Int -> Int -> Gen [InputShape]
+generateInputShapes tot recLen = do
+    let noRecLen = tot - recLen
+    noRecLen1 <- Gen.integral (Range.linear 1 (noRecLen-1))
+    let noRecLen2 = noRecLen - noRecLen1
+    loopedVars <- Gen.integral (Range.linear 1 (recLen-1))
+    prerec <- generateNoRecShapes noRecLen1
+    rec_ <- RecStmt loopedVars <$> generateNoRecShapes (recLen-loopedVars)
+    postrec <- generateNoRecShapes noRecLen2
+    return $ prerec ++ (rec_ : postrec)
+    where
+        generateNoRecShapes :: Int -> Gen [InputShape]
+        generateNoRecShapes i = Gen.list (Range.singleton i) $
+            Gen.choice [return ShapeSV, return ShapePV]
+
+generateProcCode :: Int -> Int -> Gen ProcCode
+generateProcCode len recLen = do
+    inpShapes <- generateInputShapes len recLen
+    (lines_, VS unused _ _) <- genLines (defaultVarSet inpShapes) inpShapes 1
+    let outvar = Set.elemAt 0 unused
+    return $ PC lines_ outvar
 
 -- Given a VarSet and a number of lines left to use, generate a var.
 someVar :: VarSet -> Gen (Var, VarSet)
@@ -72,16 +103,35 @@ sampleUsed vs@(VS unused used repeatsAllowed)
 
 -- Given a VarSet, a list of InputShape to follow, and a line number, generate one line per InputShape with an input of that shape.
 genLines :: VarSet -> [InputShape] -> Int -> Gen ([Line], VarSet)
-genLines vs [] n = return ([], vs)
+genLines vs [] _ = return ([], vs)
 genLines vs (ShapeSV : ss) n = do
     preval <- Gen.integral (Range.linear 0 100)
     (line, vs') <- Gen.choice [unopGen (Pre preval) vs n, unopGen Inc vs n]
-    (lines, vs'') <- genLines vs' ss (n+1)
-    return (line : lines, vs'')
+    (lines_, vs'') <- genLines vs' ss (n+1)
+    return (line : lines_, vs'')
 genLines vs (ShapePV : ss) n = do
     (line, vs') <- Gen.choice [binopGen Add vs n, binopGen Sub vs n, binopGen Div vs n, binopGen Mul vs n]
-    (lines, vs'') <- genLines vs' ss (n+1)
-    return (line : lines, vs'')
+    (lines_, vs'') <- genLines vs' ss (n+1)
+    return (line : lines_, vs'')
+genLines vs (RecStmt k is : ss) n = do
+    -- First, generate k new variables. We give these names n to n+k-1.
+    let loopVars = [n..(n+k-1)]
+        vs' = vs {unused = Set.union (unused vs) (Set.fromAscList loopVars)}
+    -- At the end of generating code for is, we will add on pres that define these vars.
+    -- Generate the code for the rest of the lines, starting with n+k. This can use vars n..(n+k-1).
+    (reclines, vs'') <- genLines vs' is (n+k)
+    -- Now we generate the required pre instructions.
+    -- For each loop variable...
+    (prelines, vs''') <- foldM (\(lines_, vs) var -> do
+            -- Generate Pre preval (some variable) (this variable)
+            -- That is, generate a Pre which sets the value of that variable.
+            preval <- Gen.integral (Range.linear 0 100)
+            (preinp, vs') <- someVar vs
+            return (lines_ ++ [Pre preval preinp var], vs')
+        ) ([], vs'') loopVars
+    -- Finally, generate the lines for ss.
+    (lines_, vs'''') <- genLines vs''' ss (n + length is + k)
+    return (RecLine (reclines ++ prelines) : lines_, vs'''')
 
 unopGen :: (SingleVar -> SingleVar -> Line) -> VarSet -> Int -> Gen (Line, VarSet)
 unopGen constr vs n = do
@@ -96,5 +146,10 @@ binopGen constr vs n = do
     let vs''' = addToUnused vs'' n
     return (constr (varl, varr) n, vs''')
 
+-- Add to unused if it is not already in used (so if it is a new variable).
+-- We need this for generating rec, where the line that generates some variable is
+-- later than its use.
 addToUnused :: VarSet -> Var -> VarSet
-addToUnused (VS unused used repeatsAllowed) v = VS (Set.insert v unused) used repeatsAllowed
+addToUnused vs@(VS unused used repeatsAllowed) v
+    | Set.member v used = vs
+    | otherwise = VS (Set.insert v unused) used repeatsAllowed
