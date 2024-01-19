@@ -1,4 +1,4 @@
-module GenerateProcCode (generateProcCode) where
+module GenerateProcCode (generateProcCode, ProcCode(..), Line(..), Var, SingleVar, PairVar) where
 
 import Hedgehog hiding (Var)
 import qualified Hedgehog.Gen as Gen
@@ -14,7 +14,7 @@ data ProcCode = PC [Line] SingleVar
 -- Each line is vj <- op -< vs, where j is the line number and vs are the input(s).
 -- e.g. Pre v vl vr === vr <- pre v -< vl.
 data Line = Pre Int SingleVar SingleVar | Add PairVar SingleVar | Sub PairVar SingleVar
-    | Mul PairVar SingleVar | Div PairVar SingleVar | Inc SingleVar SingleVar | RecLine [Line]
+    | Mul PairVar SingleVar | Inc SingleVar SingleVar | RecLine [Line]
     deriving (Show)
 -- Ints are used to represent vars, with variable i being called v_i.
 type Var = Int
@@ -90,9 +90,9 @@ someVar vs@(VS _ _ repeatsAllowed)
 consumeUnused :: VarSet -> Gen (Var, VarSet)
 consumeUnused vs@(VS unused used repeatsAllowed)
     | Set.size unused == 0 = sampleUsed vs
-    | otherwise = let
-        e = Set.elemAt 0 unused
-        in return (e, VS (Set.drop 1 unused) (Set.insert e used) repeatsAllowed)
+    | otherwise = do 
+        e <- Gen.element (Set.toList unused)
+        return (e, VS (Set.delete e unused) (Set.insert e used) repeatsAllowed)
 
 sampleUsed :: VarSet -> Gen (Var, VarSet)
 sampleUsed vs@(VS unused used repeatsAllowed)
@@ -110,7 +110,7 @@ genLines vs (ShapeSV : ss) n = do
     (lines_, vs'') <- genLines vs' ss (n+1)
     return (line : lines_, vs'')
 genLines vs (ShapePV : ss) n = do
-    (line, vs') <- Gen.choice [binopGen Add vs n, binopGen Sub vs n, binopGen Div vs n, binopGen Mul vs n]
+    (line, vs') <- Gen.choice [binopGen Add vs n, binopGen Sub vs n, binopGen Mul vs n]
     (lines_, vs'') <- genLines vs' ss (n+1)
     return (line : lines_, vs'')
 genLines vs (RecStmt k is : ss) n = do

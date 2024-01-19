@@ -32,6 +32,8 @@ dependencies:
 - megaparsec
 - template-haskell
 - hedgehog
+- raw-strings-qq
+- Yampa
 
 default-extensions:
 - GADTs
@@ -84,7 +86,7 @@ tests:
   rearrange-afrp-test:
     main:                Spec.hs
     source-dirs:
-    - gen
+    - generated
     - test
     ghc-options:
     - -threaded

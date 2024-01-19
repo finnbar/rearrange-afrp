@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables #-}
 
-module RAFRP (module AFRP, module GenProc.GeneralisedArrow, makeAFRP) where
+module RAFRP (module AFRP, module GenProc.GeneralisedArrow, makeAFRP, toRearrangeable) where
 
 import AFRP
 import MakeMIO
@@ -37,6 +37,25 @@ makeAFRP afrp = do
         writeRef inref inp
         runner
         readRef outref
+
+-- This bypasses all of the Rearrange stuff, which we need in order to see if it compiles.
+toRearrangeable :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' prog'.
+    (Fresh a EmptyFreshState a' fs,
+    AssignMemory arr a b arr' a' b' fs fs',
+    env ~ EnvFromBuildState fs',
+    AsMemory arr' a' b' env prog,
+    Augment prog b' fs' prog' b'' fs'',
+    env' ~ EnvFromBuildState fs'',
+    ProxToRef a' env', ProxToRef b'' env') =>
+    AFRP arr a b -> IO (HList prog', HList env', Ref a', Ref b'')
+toRearrangeable afrp = do
+    (inprox, bs) <- fresh @_ @a newBuildState (Proxy :: Proxy a)
+    (afrp', _, bs'@(MkBuildState env)) <- assignMemory afrp inprox bs
+    (prog, outprox') <- toProgram afrp' (Proxy :: Proxy a') env
+    (prog', outprox'', MkBuildState env') <- augment prog outprox' bs'
+    let inref = proxToRef inprox env'
+        outref = proxToRef outprox'' env'
+    Prelude.return (prog', env', inref, outref)
 
 hlistToSet :: (Sortable xs, Nubable (Sort xs)) => HList xs -> Set (AsSet xs)
 hlistToSet s = asSet (hls s)

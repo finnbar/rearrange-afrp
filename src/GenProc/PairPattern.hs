@@ -54,7 +54,7 @@ term = pair <|> (OneParsed <$> tuple) <|> (OneParsed <$> list) <|> (OneParsed <$
     where
         tuple = between' '(' ')'
         list = between' '[' ']'
-        identifier = (:) <$> letterChar <*> many (alphaNumChar <|> char '_' <|> char '\'')
+        identifier = (:) <$> (letterChar <|> char '_') <*> many (alphaNumChar <|> char '_' <|> char '\'')
 
 between' :: Char -> Char -> Parser String
 between' l r = do

@@ -126,6 +126,12 @@ second = (id ***)
 arr :: (Val a -> Val b) -> GenArrow ArrowArr a b
 arr = Arr
 
+-- A few helpers for arr:
+arr11 :: (a -> b) -> GenArrow ArrowArr (V a) (V b)
+arr11 f = arr $ \(One x) -> One (f x)
+arr21 :: (a -> b -> c) -> GenArrow ArrowArr (P (V a) (V b)) (V c)
+arr21 f = arr $ \(Pair (One x) (One y)) -> One (f x y)
+
 app :: GenArrow ArrowApp (P (V (GenArrow ar b c)) b) c
 app = App
 
@@ -144,6 +150,10 @@ f ||| g = f +++ g >>> arr untag
 
 pre :: Val a -> GenArrow ArrowPre a a
 pre = Pre
+
+-- A helper for pre:
+pre1 :: a -> GenArrow ArrowPre (V a) (V a)
+pre1 a = Pre (One a)
 
 returnA :: GenArrow ArrowId a a
 returnA = Id
