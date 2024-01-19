@@ -50,6 +50,7 @@ library
       GenProc.PairPattern
       GenProc.ProcTH
       GenProc.TransformProc
+      GraphRearrange
       MakeMIO
       MonadRW
       Naming
