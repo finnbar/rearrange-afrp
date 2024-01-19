@@ -151,7 +151,11 @@ envToExp Empty = OneExp $ Con () (Special () (UnitCon ()))
 varsToEnv :: [Name ()] -> Env
 varsToEnv [] = Empty
 varsToEnv [nam] = VarEnv nam
-varsToEnv (nam : nams) = PairEnv (VarEnv nam) $ varsToEnv nams
+varsToEnv [naml, namr] = PairEnv (VarEnv naml) (VarEnv namr)
+varsToEnv many = let (l, r) = bisect many in PairEnv (varsToEnv l) (varsToEnv r)
+    where
+        bisect :: [a] -> ([a], [a])
+        bisect xs = splitAt (length xs `div` 2) xs
 
 -- ***
 -- Express routing functions, for routing data without having to build Exps.
