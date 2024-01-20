@@ -13,6 +13,7 @@ import GenProc.BuildExp
 import Prelude hiding (exp) -- Removes name shadowing warnings.
 
 data Env = PairEnv Env Env | VarEnv (Name ()) | Empty
+    deriving (Show)
 -- An environment with some number of args alongside it (may be zero).
 -- This is structured in code as (env, args) in general. Three cases:
 -- 1. WithArgs env 0 - we just have env as there are no args.
@@ -164,6 +165,11 @@ varsToEnv many = let (l, r) = bisect many in PairEnv (varsToEnv l) (varsToEnv r)
 data RoutingFn = DropL | DropR | Dup | RoutId
     | RoutingPair RoutingFn RoutingFn | RoutingComp RoutingFn RoutingFn
     | EmptyRout
+
+filterToEnvExp :: Env -> Set (Name ()) -> (Env, Exp ())
+filterToEnvExp env nms = case filterEnv env nms of
+    Just (env', rout) -> (env', routingFnAsExp rout)
+    Nothing -> (Empty, routingFnAsExp EmptyRout)
 
 filterEnv :: Env -> Set (Name ()) -> Maybe (Env, RoutingFn)
 filterEnv env st = filterEnv' env

@@ -6,6 +6,7 @@ import Language.Haskell.Exts.Util
 import GenProc.BuildExp
 import GenProc.Env
 
+import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Prelude hiding (exp) -- Removes name shadowing warnings.
@@ -258,16 +259,17 @@ transformInnerProcs d = d
 
 -- Transform a RecStmt () stmts using env, which creates a loop which loops back variables which are defined
 -- after their use within the rec.
--- The THExp is of the form env -> env', since rec discards its value (if it has one).
-transformRecStmt :: [Stmt ()] -> Env -> (Exp (), Env)
-transformRecStmt stmts env = let
+-- The Set (Name ()) argument is the free variables after this rec (so cannot be deleted).
+-- The Exp is of the form env -> env', since rec discards its value (if it has one).
+transformRecStmt :: [Stmt ()] -> Env -> Set (Name ()) -> (Exp (), Env)
+transformRecStmt stmts env usedAfter = let
     Vars boundV freeV = allVars stmts
     -- These are the variables provided on the loop backedge.
     useBeforeBind = Set.intersection boundV freeV
     -- Merge this looped env with the existing one
     loopedEnv = varsToEnv (Set.toList useBeforeBind)
     (merger, env') = mergeEnvRev env loopedEnv
-    (thexp, env'') = transformRec stmts env'
+    (thexp, env'') = transformRec stmts env' (Set.union usedAfter useBeforeBind)
     -- This should make a TExp of form env'' -> (env'', loopedEnv).
     -- This is a different process to filterEnv as it is key that we do not use arr here.
     -- NOTE We guarantee no duplicates, so can use swaps etc to avoid dup/drop chains?
@@ -276,57 +278,78 @@ transformRecStmt stmts env = let
     in (loopExp (composeExp merger (composeExp thexp (composeExp (varExp "dup") (callExp "second" reduceToLoopEnv)))), env'')
 
 -- Transform do-notation within a proc into a long chain of arrow operations.
--- The THExp will be an arrow of the form env -> (return of stmts, env') where env, env' are the Env in/output.
+-- The Exp will be an arrow of the form env -> (return of stmts, env') where env, env' are the Env in/output.
+-- NOTE: We apply a filterEnv at the start of each statement, to remove unused variables early as to avoid duplicating them.
 transformDo :: [Stmt ()] -> Env -> (Exp (), Env)
 -- A final exp, which is the returned value.
 transformDo [Qualifier () exp] env = (transformQualifier exp env, env)
 transformDo [_] _ = error "A do block must end with a single qualifier (that is, not a generator a <- b, nor a rec or let)."
 -- In this case, we are discarding the result of an action, but still need to do it.
-transformDo (Qualifier () exp : xs) env =
-    let thexp = transformQualifierDrop exp env
-        (thexps, env') = transformDo xs env
-    in (composeExp thexp thexps, env')
+transformDo stmts@(Qualifier () exp : xs) env =
+    let Vars _ free = allVars stmts
+        (env', rout) = filterToEnvExp env free
+        thexp = transformQualifierDrop exp env'
+        (thexps, env'') = transformDo xs env'
+    in (composeExp rout $ composeExp thexp thexps, env'')
 -- pat <- exp, so we need to run exp and put it in the env as pat.
 -- We merge the environments to remove any duplications.
-transformDo (Generator () pat exp : xs) env =
-    let (thexp, env') = transformGenerator pat exp env
-        (thexps, env'') = transformDo xs env'
-    in (composeExp thexp thexps, env'')
-transformDo (LetStmt () (BDecls () decls) : xs) env = let
-    (thexp, env') = transformLet decls env
-    (thexps, env'') = transformDo xs env'
-    in (composeExp thexp thexps, env'')
-transformDo (RecStmt () stmts : xs) env = let
-    (thexp, env') = transformRecStmt stmts env
-    (thexps, env'') = transformDo xs env'
-    in (composeExp thexp thexps, env'')
+transformDo stmts@(Generator () pat exp : xs) env =
+    let Vars _ free = allVars stmts
+        (env', rout) = filterToEnvExp env free
+        (thexp, env'') = transformGenerator pat exp env'
+        (thexps, env''') = transformDo xs env''
+    in (composeExp rout $ composeExp thexp thexps, env''')
+transformDo stmts@(LetStmt () (BDecls () decls) : xs) env =
+    let Vars _ free = allVars stmts
+        (env', rout) = filterToEnvExp env free
+        (thexp, env'') = transformLet decls env'
+        (thexps, env''') = transformDo xs env''
+    in (composeExp rout $ composeExp thexp thexps, env''')
+transformDo allStmts@(RecStmt () stmts : xs) env =
+    let Vars _ free = allVars allStmts
+        (env', rout) = filterToEnvExp env free
+        Vars _ freeAfter = allVars xs
+        (thexp, env'') = transformRecStmt stmts env' freeAfter
+        (thexps, env''') = transformDo xs env''
+    in (composeExp rout $ composeExp thexp thexps, env''')
 transformDo _ _ = error "unimplemented"
 
 -- Transform rec notation into a long chain of arrow operations.
 -- The THExp will be an arrow of the form env -> env' where env, env' are the Env in/output.
-transformRec :: [Stmt ()] -> Env -> (Exp (), Env)
+-- The Set (Name ()) is all vars used after this point that may not appear free (either because
+-- they are used outside of the rec or are looped back to the start of the rec).
+transformRec :: [Stmt ()] -> Env -> Set (Name ()) -> (Exp (), Env)
 -- This differs from transformDo in its base cases.
-transformRec [Qualifier () exp] env = (transformQualifierDrop exp env, env)
-transformRec [Generator () pat exp] env = transformGenerator pat exp env
-transformRec [LetStmt () (BDecls () decls)] env = transformLet decls env
-transformRec [RecStmt () stmts] env = transformRecStmt stmts env
-transformRec (Qualifier () exp : xs) env =
-    let thexp = transformQualifierDrop exp env
-        (thexps, env') = transformRec xs env
-    in (composeExp thexp thexps, env')
-transformRec (Generator () pat exp : xs) env =
-    let (thexp, env') = transformGenerator pat exp env
-        (thexps, env'') = transformRec xs env'
-    in (composeExp thexp thexps, env'')
-transformRec (LetStmt () (BDecls () decls) : xs) env = let
-    (thexp, env') = transformLet decls env
-    (thexps, env'') = transformRec xs env'
-    in (composeExp thexp thexps, env'')
-transformRec (RecStmt () stmts : xs) env = let
-    (thexp, env') = transformRecStmt stmts env
-    (thexps, env'') = transformRec xs env'
-    in (composeExp thexp thexps, env'')
-transformRec _ _ = error "unimplemented"
+transformRec [Qualifier () exp] env _ = (transformQualifierDrop exp env, env)
+transformRec [Generator () pat exp] env _ = transformGenerator pat exp env
+transformRec [LetStmt () (BDecls () decls)] env _ = transformLet decls env
+transformRec [RecStmt () stmts] env usedAfter = transformRecStmt stmts env usedAfter
+transformRec stmts@(Qualifier () exp : xs) env usedAfter =
+    let Vars _ free = allVars stmts
+        (env', rout) = filterToEnvExp env (Set.union free usedAfter)
+        thexp = transformQualifierDrop exp env'
+        (thexps, env'') = transformRec xs env usedAfter
+    in (composeExp rout $ composeExp thexp thexps, env'')
+transformRec stmts@(Generator () pat exp : xs) env usedAfter =
+    let Vars _ free = allVars stmts
+        (env', rout) = filterToEnvExp env (Set.union free usedAfter)
+        (thexp, env'') = transformGenerator pat exp env'
+        (thexps, env''') = transformRec xs env'' usedAfter
+    in (composeExp rout $ composeExp thexp thexps, env''')
+transformRec stmts@(LetStmt () (BDecls () decls) : xs) env usedAfter =
+    let Vars _ free = allVars stmts
+        (env', rout) = filterToEnvExp env (Set.union free usedAfter)
+        (thexp, env'') = transformLet decls env'
+        (thexps, env''') = transformRec xs env'' usedAfter
+    in (composeExp rout $ composeExp thexp thexps, env''')
+transformRec allStmts@(RecStmt () stmts : xs) env usedAfter =
+    let Vars _ free = allVars allStmts
+        (env', rout) = filterToEnvExp env (Set.union free usedAfter)
+        Vars _ freeAfter = allVars xs
+        (thexp, env'') = transformRecStmt stmts env' (Set.union usedAfter freeAfter)
+        (thexps, env''') = transformRec xs env'' usedAfter
+    in (composeExp rout $ composeExp thexp thexps, env''')
+transformRec _ _ _ = error "unimplemented"
 
 -- Extract the free variables in the expr, and then create a function routing from the env to those free variables.
 -- Finally, combine those variables into the required expr via a call to arr.
