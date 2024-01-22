@@ -8,7 +8,7 @@ for ITERATION in 1 2 3 4 5 6 7 8 9 10; do
             # Build a program using those parameters.
             stack run $SIZE $LOOPFRAC
             # Make a backup of the program.
-            cp "generated/Test0.hs" "tested/Test-${$ITERATION}-${$SIZE}-${$LOOPFRAC}.hs"
+            cp "generated/Test0.hs" "tested/Test-$ITERATION-$SIZE-$LOOPFRAC.hs"
             # Benchmark!
             stack bench
             # Save the CSV for later.
