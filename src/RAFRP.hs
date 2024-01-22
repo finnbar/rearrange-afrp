@@ -46,6 +46,7 @@ toRearrangeable :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' prog'
     AsMemory arr' a' b' env prog,
     Augment prog b' fs' prog' b'' fs'',
     env' ~ EnvFromBuildState fs'',
+    AsDesc a' ~ a, AsDesc b'' ~ b,
     ProxToRef a' env', ProxToRef b'' env') =>
     AFRP arr a b -> IO (HList prog', HList env', Ref a', Ref b'')
 toRearrangeable afrp = do

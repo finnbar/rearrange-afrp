@@ -32,12 +32,12 @@ main = do
             readRef outref
         !inps' = map One inps
     
-    defaultMain $ benches yampa af inps inps'
+    defaultMain $ benches yampa af inps inps' (codeLen, codeRecLen)
 
-benches :: SF Int Int -> (Val (V Int) -> IO (Val (V Int))) -> [Int] -> [Val (V Int)] -> [Benchmark]
-benches sf afrp inps inps' = [
-        bench "sf" $ nfIO (benchSF sf inps),
-        bench "afrp" $ nfIO (benchAFRP afrp inps')
+benches :: SF Int Int -> (Val (V Int) -> IO (Val (V Int))) -> [Int] -> [Val (V Int)] -> (Int, Int) -> [Benchmark]
+benches sf afrp inps inps' params = [
+        bench ("sf" ++ show params) $ nfIO (benchSF sf inps),
+        bench ("afrp" ++ show params) $ nfIO (benchAFRP afrp inps')
     ]
 
 -- Each benchX works by allocating our 100000 values to an IORef, and then popping from it at each step.

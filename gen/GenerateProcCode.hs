@@ -55,19 +55,20 @@ newVars = sum . map numVars
 
 -- Take total length and rec length, and generate the corresponding input shape.
 generateInputShapes :: Int -> Int -> Gen [InputShape]
+generateInputShapes tot 0 = generateNoRecShapes tot
 generateInputShapes tot recLen = do
     let noRecLen = tot - recLen
-    noRecLen1 <- Gen.integral (Range.linear 1 (noRecLen-1))
+    noRecLen1 <- Gen.integral (Range.linear 0 (noRecLen-1))
     let noRecLen2 = noRecLen - noRecLen1
-    loopedVars <- Gen.integral (Range.linear 1 (recLen-1))
+    loopedVars <- Gen.integral (Range.linear 0 (recLen-1))
     prerec <- generateNoRecShapes noRecLen1
     rec_ <- RecStmt loopedVars <$> generateNoRecShapes (recLen-loopedVars)
     postrec <- generateNoRecShapes noRecLen2
     return $ prerec ++ (rec_ : postrec)
-    where
-        generateNoRecShapes :: Int -> Gen [InputShape]
-        generateNoRecShapes i = Gen.list (Range.singleton i) $
-            Gen.choice [return ShapeSV, return ShapePV]
+
+generateNoRecShapes :: Int -> Gen [InputShape]
+generateNoRecShapes i = Gen.list (Range.singleton i) $
+    Gen.choice [return ShapeSV, return ShapePV]
 
 generateProcCode :: Int -> Int -> Gen ProcCode
 generateProcCode len recLen = do
