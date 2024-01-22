@@ -1,11 +1,8 @@
-{-# LANGUAGE BangPatterns #-}
-
 import Test0
 import RAFRP
 import FRP.Yampa
 import GraphRearrange (buildGraphAndTopsort)
 
--- TODO Turn this into an actual test suite.
 -- NOTE: It might be worth investigating the performance of Naming and MakeMIO at some point, but Rearrange needs fixing first.
 -- NOTE: It seems like getting Set involved REALLY breaks performance. Interesting.
 -- My expectation is that it's because a lot of invariants are enforced on Set, which require a lot of memory to enumerate.

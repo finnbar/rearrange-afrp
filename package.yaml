@@ -94,3 +94,21 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - rearrange-afrp
+
+benchmarks:
+  rearrange-afrp-bench:
+    main:               Bench.hs
+    source-dirs:
+    - bench
+    - generated
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - rearrange-afrp
+    - criterion
+    - hedgehog
+    - Yampa
+    - deepseq

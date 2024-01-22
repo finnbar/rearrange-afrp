@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables, Strict #-}
 
 module RAFRP (module AFRP, module GenProc.GeneralisedArrow, makeAFRP, toRearrangeable) where
 

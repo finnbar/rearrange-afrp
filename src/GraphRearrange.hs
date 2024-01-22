@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances, ScopedTypeVariables, Strict #-}
 
 -- A hastily-added value-level version of rearrange.
 -- This replaces the type-level rearrange, which actively does not compile on larger examples
@@ -14,6 +14,7 @@ import Data.Type.HList
 import Data.Type.Set (Set(..))
 import Data.Proxy
 import GHC.TypeLits (KnownNat, natVal)
+import Debug.Trace
 
 class ReifyCellList xs where
     reifyCellList :: Proxy xs -> [Int]
@@ -65,9 +66,9 @@ buildGraphAndTopsort mems env = let
     reified = memsToIODependencies mems env
     withKeys = assignKeys reified
     (graph, fromVertex, _) = graphFromEdges (resolveDependencies withKeys)
-    sortedVertices = topSort graph
+    sortedVertices = trace "topsort" $ topSort graph
     computations = map (\vert -> let (io, _, _) = fromVertex vert in io) sortedVertices
-    in sequence_ computations
+    in trace "built graph" $ sequence_ computations
 
 -- NOTE: This enforces NONE of the Set requirements.
 -- We use this since we know the HList to be sorted and without repeats, and calling the Set constraints

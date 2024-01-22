@@ -184,3 +184,50 @@ test-suite rearrange-afrp-test
     , template-haskell
     , type-level-sets
   default-language: GHC2021
+
+benchmark rearrange-afrp-bench
+  type: exitcode-stdio-1.0
+  main-is: Bench.hs
+  other-modules:
+      Test0
+      Paths_rearrange_afrp
+  hs-source-dirs:
+      bench
+      generated
+  default-extensions:
+      GADTs
+      MultiParamTypeClasses
+      DataKinds
+      PolyKinds
+      FlexibleInstances
+      BangPatterns
+      TypeFamilies
+      ExplicitForAll
+      StandaloneKindSignatures
+      TypeOperators
+      ConstraintKinds
+      TypeApplications
+      FlexibleContexts
+      TemplateHaskell
+      QuasiQuotes
+      PartialTypeSignatures
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-star-is-type -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      Yampa
+    , base >=4.7 && <5
+    , containers
+    , criterion
+    , data-default
+    , deepseq
+    , first-class-families
+    , haskell-src-exts
+    , haskell-src-exts-util
+    , haskell-src-meta
+    , hedgehog
+    , megaparsec
+    , monad-var
+    , raw-strings-qq
+    , rearrange-afrp
+    , template-haskell
+    , type-level-sets
+  default-language: GHC2021
