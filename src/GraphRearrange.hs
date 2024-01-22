@@ -9,9 +9,7 @@ import Data.Graph
 import Data.List (intersect)
 import Data.Maybe (mapMaybe)
 import Data.Memory.Types
-import Data.Memory.RunMemory
 import Data.Type.HList
-import Data.Type.Set (Set(..))
 import Data.Proxy
 import GHC.TypeLits (KnownNat, natVal)
 import Debug.Trace
