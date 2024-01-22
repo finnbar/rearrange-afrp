@@ -6,8 +6,9 @@
 
 import Test0
 
-import Criterion
 import Criterion.Main
+import Criterion.Types (Config(..), Verbosity(..))
+import Statistics.Types (cl99)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import RAFRP
@@ -30,7 +31,7 @@ main = do
             readRef outref
         !inps' = map One inps
     
-    defaultMain $ benches yampa af inps inps' (codeLen, codeRecLen)
+    defaultMainWith (defaultConfig {csvFile = Just "tests.csv", confInterval = cl99}) $ benches yampa af inps inps' (codeLen, codeRecLen)
 
 benches :: SF Double Double -> (Val (V Double) -> IO (Val (V Double))) -> [Double] -> [Val (V Double)] -> (Int, Int) -> [Benchmark]
 benches sf afrp inps inps' params = [

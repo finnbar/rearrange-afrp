@@ -9,6 +9,8 @@ main = do
     l : rl : _ <- getArgs
     let len :: Int
         len = read l
+        recLenFrac :: Double
+        recLenFrac = read rl
         recLen :: Int
-        recLen = read rl
+        recLen = round (fromIntegral len * recLenFrac)
     generateFile len recLen "Test0"
