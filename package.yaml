@@ -112,3 +112,4 @@ benchmarks:
     - hedgehog
     - Yampa
     - deepseq
+    - statistics

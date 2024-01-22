@@ -229,6 +229,7 @@ benchmark rearrange-afrp-bench
     , monad-var
     , raw-strings-qq
     , rearrange-afrp
+    , statistics
     , template-haskell
     , type-level-sets
   default-language: GHC2021
