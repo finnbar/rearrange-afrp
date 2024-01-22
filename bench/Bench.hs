@@ -17,11 +17,9 @@ import Control.DeepSeq
 import Control.Monad (replicateM_)
 import Data.IORef
 
--- NOTE: May want to move to doubles to force more computation.
-
 main :: IO ()
 main = do
-    !inps <- Gen.sample $ Gen.list (Range.singleton 100000) $ Gen.integral (Range.linear 0 10000)
+    !inps <- Gen.sample $ Gen.list (Range.singleton 100000) $ Gen.double (Range.exponentialFloat 0 100)
 
     -- Build the AFRP runner
     (prog, env, inref, outref) <- toRearrangeable afrp
@@ -34,17 +32,16 @@ main = do
     
     defaultMain $ benches yampa af inps inps' (codeLen, codeRecLen)
 
-benches :: SF Int Int -> (Val (V Int) -> IO (Val (V Int))) -> [Int] -> [Val (V Int)] -> (Int, Int) -> [Benchmark]
+benches :: SF Double Double -> (Val (V Double) -> IO (Val (V Double))) -> [Double] -> [Val (V Double)] -> (Int, Int) -> [Benchmark]
 benches sf afrp inps inps' params = [
         bench ("sf" ++ show params) $ nfIO (benchSF sf inps),
         bench ("afrp" ++ show params) $ nfIO (benchAFRP afrp inps')
     ]
 
 -- Each benchX works by allocating our 100000 values to an IORef, and then popping from it at each step.
--- This means that every benchmark performs a read from memory - if only the compiled AFRP did this it would disadvantage it.
 -- This is the same technique as in Chupin and Nilsson's SFRP.
 -- (see in particular: https://gitlab.com/chupin/scalable-frp/-/blob/master/src/EnclRunTest.hs)
-benchAFRP :: (Val (V Int) -> IO (Val (V Int))) -> [Val (V Int)] -> IO ()
+benchAFRP :: (Val (V Double) -> IO (Val (V Double))) -> [Val (V Double)] -> IO ()
 benchAFRP !runner ins = do 
     inputRef <- newIORef ins
     replicateM_ (length ins) $ do
@@ -53,7 +50,7 @@ benchAFRP !runner ins = do
         One out <- runner i
         forceM out
 
-benchSF :: SF Int Int -> [Int] -> IO ()
+benchSF :: SF Double Double -> [Double] -> IO ()
 benchSF sf ins = do
     inputRef <- newIORef ins
     handle <- reactInit (return 0) (\handle' _ v -> forceM v >> return True) sf

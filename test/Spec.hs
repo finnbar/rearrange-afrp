@@ -10,7 +10,7 @@ import GraphRearrange (buildGraphAndTopsort)
 -- TODO: Removing the use of Set solves all of our issues. Can we modify the original Rearrange to not use Set too?
 -- Will that fix our issues?
 
-afrpVsYampa :: SF Int Int -> (Val (V Int) -> IO (Val (V Int))) -> [Int] -> [Val (V Int)] -> IO ()
+afrpVsYampa :: SF Double Double -> (Val (V Double) -> IO (Val (V Double))) -> [Double] -> [Val (V Double)] -> IO ()
 afrpVsYampa ymp af ins ins' = do
     let ympRes = embed ymp (deltaEncode 1 ins)
     afrpRes <- mapM af ins'

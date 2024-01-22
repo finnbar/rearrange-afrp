@@ -12,8 +12,8 @@ generateFile codeLen codeRecLen modNam = do
     let yampaCode = toYampa procCode
         afrpCode = toAFRP procCode
         moduleName = "{-# LANGUAGE Arrows #-}\nmodule " ++ modNam ++ " where\n\n"
-        yampaDef = "yampa :: SF Int Int\nyampa = " ++ yampaCode ++ "\n\n"
-        afrpDef = "afrp :: AFRP _ (V Int) (V Int)\nafrp = " ++ afrpCode ++ "\n\n"
+        yampaDef = "yampa :: SF Double Double\nyampa = " ++ yampaCode ++ "\n\n"
+        afrpDef = "afrp :: AFRP _ (V Double) (V Double)\nafrp = " ++ afrpCode ++ "\n\n"
         bonusConsts = "codeLen :: Int\ncodeLen = " ++ show codeLen ++ "\ncodeRecLen :: Int\ncodeRecLen = " ++ show codeRecLen
     writeFile ("generated/" ++ modNam ++ ".hs") $ moduleName ++ header ++ yampaDef ++ afrpDef ++ bonusConsts
 

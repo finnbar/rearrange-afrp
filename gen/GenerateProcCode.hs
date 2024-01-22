@@ -13,7 +13,7 @@ data ProcCode = PC [Line] SingleVar
     deriving (Show)
 -- Each line is vj <- op -< vs, where j is the line number and vs are the input(s).
 -- e.g. Pre v vl vr === vr <- pre v -< vl.
-data Line = Pre Int SingleVar SingleVar | Add PairVar SingleVar | Sub PairVar SingleVar
+data Line = Pre Double SingleVar SingleVar | Add PairVar SingleVar | Sub PairVar SingleVar
     | Mul PairVar SingleVar | Inc SingleVar SingleVar | RecLine [Line]
     deriving (Show)
 -- Ints are used to represent vars, with variable i being called v_i.
@@ -55,12 +55,14 @@ newVars = sum . map numVars
 
 -- Take total length and rec length, and generate the corresponding input shape.
 generateInputShapes :: Int -> Int -> Gen [InputShape]
+-- We enforce that recLen > 1, since we need the loop to do something and have at least one loop variable.
 generateInputShapes tot 0 = generateNoRecShapes tot
+generateInputShapes tot 1 = generateNoRecShapes tot
 generateInputShapes tot recLen = do
     let noRecLen = tot - recLen
     noRecLen1 <- Gen.integral (Range.linear 0 (noRecLen-1))
     let noRecLen2 = noRecLen - noRecLen1
-    loopedVars <- Gen.integral (Range.linear 0 (recLen-1))
+    loopedVars <- Gen.integral (Range.linear (min 2 (recLen-1)) (recLen-1))
     prerec <- generateNoRecShapes noRecLen1
     rec_ <- RecStmt loopedVars <$> generateNoRecShapes (recLen-loopedVars)
     postrec <- generateNoRecShapes noRecLen2
@@ -88,12 +90,14 @@ someVar vs@(VS _ _ repeatsAllowed)
     | otherwise = consumeUnused vs
 
 -- Consumes the lowest element of that set.
+-- This is so that it is very likely that loop variables are used before the end of the loop.
+-- (So that we actually end up with a loop.)
 consumeUnused :: VarSet -> Gen (Var, VarSet)
 consumeUnused vs@(VS unused used repeatsAllowed)
-    | Set.size unused == 0 = sampleUsed vs
-    | otherwise = do 
-        e <- Gen.element (Set.toList unused)
-        return (e, VS (Set.delete e unused) (Set.insert e used) repeatsAllowed)
+    | Set.null unused = sampleUsed vs
+    | otherwise = let
+        e = Set.elemAt 0 unused
+        in return (e, VS (Set.delete e unused) (Set.insert e used) repeatsAllowed)
 
 sampleUsed :: VarSet -> Gen (Var, VarSet)
 sampleUsed vs@(VS unused used repeatsAllowed)
@@ -106,7 +110,7 @@ sampleUsed vs@(VS unused used repeatsAllowed)
 genLines :: VarSet -> [InputShape] -> Int -> Gen ([Line], VarSet)
 genLines vs [] _ = return ([], vs)
 genLines vs (ShapeSV : ss) n = do
-    preval <- Gen.integral (Range.linear 0 100)
+    preval <- Gen.double (Range.exponentialFloat 0 100)
     (line, vs') <- Gen.choice [unopGen (Pre preval) vs n, unopGen Inc vs n]
     (lines_, vs'') <- genLines vs' ss (n+1)
     return (line : lines_, vs'')
@@ -126,7 +130,7 @@ genLines vs (RecStmt k is : ss) n = do
     (prelines, vs''') <- foldM (\(lines_, vs) var -> do
             -- Generate Pre preval (some variable) (this variable)
             -- That is, generate a Pre which sets the value of that variable.
-            preval <- Gen.integral (Range.linear 0 100)
+            preval <- Gen.double (Range.exponentialFloat 0 100)
             (preinp, vs') <- someVar vs
             return (lines_ ++ [Pre preval preinp var], vs')
         ) ([], vs'') loopVars
