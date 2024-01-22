@@ -7,6 +7,7 @@ import qualified Hedgehog.Range as Range
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad
+import qualified Data.Maybe as M (mapMaybe)
 
 -- Proc code consists of some number of lines of code and then a numbered Var
 data ProcCode = PC [Line] SingleVar
@@ -75,9 +76,59 @@ generateNoRecShapes i = Gen.list (Range.singleton i) $
 generateProcCode :: Int -> Int -> Gen ProcCode
 generateProcCode len recLen = do
     inpShapes <- generateInputShapes len recLen
-    (lines_, VS unused _ _) <- genLines (defaultVarSet inpShapes) inpShapes 1
+    (lines_, VS unused _ _) <- Gen.filter recContainsCycle $ genLines (defaultVarSet inpShapes) inpShapes 1
     let outvar = Set.elemAt 0 unused
     return $ PC lines_ outvar
+    where
+        recContainsCycle :: ([Line], VarSet) -> Bool
+        recContainsCycle (ls, _) = let
+            -- Get any recs:
+            recs = M.mapMaybe (\v -> case v of
+                RecLine ss -> Just ss
+                _ -> Nothing) ls
+            in all hasCycle recs
+        
+        -- Check whether a variable is used before its definition.
+        -- Get all defined variables, and then step through to find those used before their definition.
+        hasCycle :: [Line] -> Bool
+        hasCycle ls = let allDefnSet = Set.fromList $ concatMap allDefined ls in
+            usedBeforeDefine Set.empty allDefnSet ls &&
+            usedAfterDefine Set.empty allDefnSet ls
+
+        allDefined :: Line -> [Var]
+        allDefined (Pre _ _ v) = [v]
+        allDefined (Add _ v) = [v]
+        allDefined (Sub _ v) = [v]
+        allDefined (Mul _ v) = [v]
+        allDefined (Inc _ v) = [v]
+        allDefined (RecLine ss) = concatMap allDefined ss
+
+        -- Given a set of defined variables, a set of eventually defined variables and a Line,
+        -- return True if a variable is used before it is defined (in eventually defined but not in defined).
+        usedBeforeDefine :: Set Var -> Set Var -> [Line] -> Bool
+        usedBeforeDefine _ _ [] = False
+        usedBeforeDefine defnd allDefined (l : ls) = case l of
+            Pre _ u v -> condition u || usedBeforeDefine (Set.insert v defnd) allDefined ls
+            Add (u1, u2) v -> condition u1 || condition u2 || usedBeforeDefine (Set.insert v defnd) allDefined ls
+            Sub (u1, u2) v -> condition u1 || condition u2 || usedBeforeDefine (Set.insert v defnd) allDefined ls
+            Mul (u1, u2) v -> condition u1 || condition u2 || usedBeforeDefine (Set.insert v defnd) allDefined ls
+            Inc u v -> condition u || usedBeforeDefine (Set.insert v defnd) allDefined ls
+            RecLine ss -> undefined -- This shouldn't come up.
+            where
+                condition var = not (Set.member var defnd) && Set.member var allDefined
+        
+        -- Make sure that at least one variable from within the loop is used.
+        usedAfterDefine :: Set Var -> Set Var -> [Line] -> Bool
+        usedAfterDefine _ _ [] = False
+        usedAfterDefine defnd allDefined (l : ls) = case l of
+            Pre _ u v -> condition u || usedAfterDefine (Set.insert v defnd) allDefined ls
+            Add (u1, u2) v -> condition u1 || condition u2 || usedAfterDefine (Set.insert v defnd) allDefined ls
+            Sub (u1, u2) v -> condition u1 || condition u2 || usedAfterDefine (Set.insert v defnd) allDefined ls
+            Mul (u1, u2) v -> condition u1 || condition u2 || usedAfterDefine (Set.insert v defnd) allDefined ls
+            Inc u v -> condition u || usedAfterDefine (Set.insert v defnd) allDefined ls
+            RecLine ss -> undefined -- This shouldn't come up.
+            where
+                condition var = Set.member var defnd
 
 -- Given a VarSet and a number of lines left to use, generate a var.
 someVar :: VarSet -> Gen (Var, VarSet)
@@ -89,15 +140,12 @@ someVar vs@(VS _ _ repeatsAllowed)
     -- Otherwise, we must use an unused one.
     | otherwise = consumeUnused vs
 
--- Consumes the lowest element of that set.
--- This is so that it is very likely that loop variables are used before the end of the loop.
--- (So that we actually end up with a loop.)
 consumeUnused :: VarSet -> Gen (Var, VarSet)
 consumeUnused vs@(VS unused used repeatsAllowed)
-    | Set.null unused = sampleUsed vs
-    | otherwise = let
-        e = Set.elemAt 0 unused
-        in return (e, VS (Set.delete e unused) (Set.insert e used) repeatsAllowed)
+    | Set.size unused == 0 = sampleUsed vs
+    | otherwise = do 
+        e <- Gen.element (Set.toList unused)
+        return (e, VS (Set.delete e unused) (Set.insert e used) repeatsAllowed)
 
 sampleUsed :: VarSet -> Gen (Var, VarSet)
 sampleUsed vs@(VS unused used repeatsAllowed)
