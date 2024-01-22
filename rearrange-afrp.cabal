@@ -101,6 +101,7 @@ library
 executable rearrange-afrp-exe
   main-is: Main.hs
   other-modules:
+      Examples
       Paths_rearrange_afrp
   hs-source-dirs:
       app
