@@ -92,6 +92,12 @@ instance AsMemory ArrowDropR' (PN a b) a env '[] where
 instance AsMemory ArrowDup' a (PN a a) env '[] where
     toProgram Dup' prox _ = Prelude.return (HNil, pairProx prox prox)
 
+instance (ProxToRef a env) => AsMemory ArrowConst' x a env '[] where
+    toProgram (Constant' c) _ env = do
+        let outprox = Proxy :: Proxy a
+        flip writeRef c $ proxToRef outprox env
+        Prelude.return (HNil, outprox)
+
 instance (ReadCells a ar, WriteCells b br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
     AsMemory ArrowArr' a b env prog where

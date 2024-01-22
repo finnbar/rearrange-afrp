@@ -50,6 +50,7 @@ data Arrow' ar ar' where
     ArrowDropL' :: Arrow' (a ::: b) b
     ArrowDropR' :: Arrow' (a ::: b) a
     ArrowDup' :: Arrow' a (a ::: a)
+    ArrowConst' :: Arrow' a b
     ArrowArr' :: Arrow' a b
     ArrowPre' :: Arrow' a a
     ArrowGGG' :: Arrow' a b -> Arrow' b c -> Desc' b -> Arrow' a c
@@ -64,6 +65,7 @@ data AFRP' arrow a b where
     DropL' :: AFRP' ArrowDropL' (PN a b) b
     DropR' :: AFRP' ArrowDropR' (PN a b) a
     Dup' :: AFRP' ArrowDup' a (PN a a)
+    Constant' :: Val (AsDesc a) -> AFRP' ArrowConst' x a
     -- NB Swap = Dup >>> (DropL *** DropR)
     -- Assoc = Dup >>> ((Id *** DropR) *** (DropL >>> DropL))
     -- Unassoc = Dup >>> ((DropR >>> DropR) *** (DropL *** Id))

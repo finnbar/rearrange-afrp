@@ -71,6 +71,12 @@ instance AssignMemory ArrowDropR (P a b) a ArrowDropR' (PN a' b') a' fs fs where
 instance AssignMemory ArrowDup a (P a a) ArrowDup' a' (PN a' a') fs fs where
     assignMemory Dup prox bs = return (Dup', pairProx prox prox, bs)
 
+instance (Fresh a fs a' fs', x ~ AsDesc x', a ~ AsDesc a') =>
+    AssignMemory ArrowConst x a ArrowConst' x' a' fs fs' where
+    assignMemory (Constant x) _ bs = do
+        (prox', bs') <- fresh bs (Proxy :: Proxy a)
+        return (Constant' x, prox', bs')
+
 instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
     AssignMemory ArrowArr a b ArrowArr' a' b' fs fs' where
     assignMemory (Arr f) _ bs = do
