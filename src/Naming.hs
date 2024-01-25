@@ -15,6 +15,7 @@ import Data.Type.Bool (If)
 
 import qualified Rearrange
 import AFRP
+import Unsafe.Coerce
 
 -- Have the ability to make Fresh names to fill in the gaps in some Desc'.
 
@@ -55,7 +56,7 @@ newBuildState = MkBuildState HNil
 type AssignMemory :: Arrow ar ar' -> Desc ar -> Desc ar'
     -> Arrow' ar ar' -> Desc' ar -> Desc' ar'
     -> FreshState -> FreshState -> Constraint
-class AssignMemory arr a b arr' a' b' fs fs' | arr a b a' fs -> arr' b' fs' where
+class AssignMemory arr a b arr' a' b' fs fs' | arr a a' fs -> arr' b b' fs' where
     assignMemory :: AFRP arr a b -> Proxy a' -> BuildState fs ->
         IO (AFRP' arr' a' b', Proxy b', BuildState fs')
 
@@ -72,29 +73,36 @@ instance AssignMemory ArrowDup a (P a a) ArrowDup' a' (PN a' a') fs fs where
     assignMemory Dup prox bs = return (Dup', pairProx prox prox, bs)
 
 instance (Fresh a fs a' fs', x ~ AsDesc x', a ~ AsDesc a') =>
-    AssignMemory ArrowConst x a ArrowConst' x' a' fs fs' where
+    AssignMemory (ArrowConst a) x a (ArrowConst' a') x' a' fs fs' where
     assignMemory (Constant x) _ bs = do
         (prox', bs') <- fresh bs (Proxy :: Proxy a)
         return (Constant' x, prox', bs')
 
 instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
-    AssignMemory ArrowArr a b ArrowArr' a' b' fs fs' where
+    AssignMemory (ArrowArr b) a b (ArrowArr' b') a' b' fs fs' where
     assignMemory (Arr f) _ bs = do
         (prox', bs') <- fresh bs (Proxy :: Proxy b)
         return (Arr' f, prox', bs')
 
-instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
-    AssignMemory ArrowPre a b ArrowPre' a' b' fs fs' where
+instance (Fresh a fs b' fs', a ~ AsDesc a', a ~ AsDesc b') =>
+    AssignMemory ArrowPre a a (ArrowPre' b') a' b' fs fs' where
     assignMemory (Pre v) _ bs = do
-        (prox', bs') <- fresh bs (Proxy :: Proxy b)
+        (prox', bs') <- fresh bs (Proxy :: Proxy a)
         return (Pre' v, prox', bs')
 
 instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' b' c' fs' fs'') =>
-    AssignMemory (ArrowGGG arrl arrr b) a c (ArrowGGG' arrl' arrr' b') a' c' fs fs'' where
-    assignMemory (f :>>>: g) prox bs = do
+    AssignMemory (ArrowGGG arrl arrr) a c (ArrowGGG' arrl' arrr') a' c' fs fs'' where
+    assignMemory fg prox bs = do
+        let (f, g) = splitGGG fg
         (f', prox', bs') <- assignMemory f prox bs
         (g', prox'', bs'') <- assignMemory g prox' bs'
         return (f' :>>>:: g', prox'', bs'')
+    
+-- NOTE: We unsafeCoerce here.
+-- This is because we know that AssignMemory will pick the b corresponding to the b hidden within the :>>>: constructor,
+-- but have no easy way to persuade Haskell of this.
+splitGGG :: GenArrow (ArrowGGG arrl arrr) a c -> (GenArrow arrl a b, GenArrow arrr b c)
+splitGGG (f :>>>: g) = (unsafeCoerce f, unsafeCoerce g)
 
 instance (AssignMemory arrl a c arrl' a' c' fs fs',
     AssignMemory arrr b d arrr' b' d' fs' fs'') =>
@@ -166,7 +174,7 @@ type family Subst x sub where
     Subst desc (sub : xs) = Subst (ApplySub desc sub) xs
     Subst desc '[] = desc
 
-class Substitute arr a b arr' a' b' sub | arr a b sub -> arr' a' b' where
+class Substitute arr a b arr' a' b' sub | arr a sub -> b arr' a' b' where
     substitute :: AFRP' arr a b -> Proxy sub -> AFRP' arr' a' b'
 
 instance (a' ~ Subst a sub) => Substitute ArrowId' a a ArrowId' a' a' sub where
@@ -185,16 +193,19 @@ instance (a' ~ Subst a sub) =>
     substitute Dup' _ = Dup'
 
 instance (a' ~ Subst a sub, b' ~ Subst b sub, AsDesc a ~ AsDesc a', AsDesc b ~ AsDesc b') =>
-    Substitute ArrowArr' a b ArrowArr' a' b' sub where
+    Substitute (ArrowArr' b) a b (ArrowArr' b') a' b' sub where
     substitute (Arr' f) _ = Arr' f
 
 instance (b ~ Subst a sub, b' ~ Subst a' sub, AsDesc a ~ AsDesc b, AsDesc a' ~ AsDesc b') =>
-    Substitute ArrowPre' a a' ArrowPre' b b' sub where
+    Substitute (ArrowPre' a') a a' (ArrowPre' b') b b' sub where
     substitute (Pre' v) _ = Pre' v
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr b c arrr' b' c' sub) =>
-    Substitute (ArrowGGG' arrl arrr b) a c (ArrowGGG' arrl' arrr' b') a' c' sub where
-    substitute (f :>>>:: g) sub = substitute f sub :>>>:: substitute g sub
+    Substitute (ArrowGGG' arrl arrr) a c (ArrowGGG' arrl' arrr') a' c' sub where
+    substitute fg sub = let (f, g) = splitGGG' fg in substitute f sub :>>>:: substitute g sub
+
+splitGGG' :: AFRP' (ArrowGGG' arrl arrr) a c -> (AFRP' arrl a b, AFRP' arrr b c)
+splitGGG' (f :>>>:: g) = (unsafeCoerce f, unsafeCoerce g)
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr c d arrr' c' d' sub) =>
     Substitute (ArrowSSS' arrl arrr) (PN a c) (PN b d) (ArrowSSS' arrl' arrr') (PN a' c') (PN b' d') sub where
