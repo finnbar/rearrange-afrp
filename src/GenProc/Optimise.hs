@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module GenProc.Optimise (optimise) where
+module GenProc.Optimise (optimise, coerceGenArrow) where
 
 import GenProc.GeneralisedArrow
 
@@ -22,10 +22,10 @@ type family Optimise arr where
     Optimise ArrowDropL = ArrowDropL
     Optimise ArrowDropR = ArrowDropR
     Optimise ArrowDup = ArrowDup
-    Optimise ArrowConst = ArrowConst
-    Optimise ArrowArr = ArrowArr
+    Optimise (ArrowConst c) = ArrowConst c
+    Optimise (ArrowArr b) = ArrowArr b
     Optimise ArrowPre = ArrowPre
-    Optimise (ArrowGGG l r b) = OptimiseComp (Optimise l) (Optimise r) b
+    Optimise (ArrowGGG l r) = OptimiseComp (Optimise l) (Optimise r)
     Optimise (ArrowSSS l r) = OptimisePair (Optimise l) (Optimise r)
     Optimise ArrowApp = ArrowApp
     Optimise (ArrowLoop ar c) = ArrowLoop (Optimise ar) c
@@ -46,17 +46,17 @@ optimise App = App
 optimise (Loop f) = Loop (optimise f)
 optimise (f :+++: g) = optimiseChoice (optimise f) (optimise g)
 
-type OptimiseComp :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
-type family OptimiseComp ar ar' desc where
-    OptimiseComp ArrowArr ArrowArr _ = ArrowArr
-    OptimiseComp ArrowDup ArrowDropL _ = ArrowId
-    OptimiseComp ArrowDup ArrowDropR _ = ArrowId
-    OptimiseComp _ ArrowConst _ = ArrowConst
-    OptimiseComp ar ArrowId _ = ar
-    OptimiseComp ArrowId ar _ = ar
-    OptimiseComp ar ar' b = ArrowGGG ar ar' b
+type OptimiseComp :: Arrow a b -> Arrow b c -> Arrow a c
+type family OptimiseComp ar ar' where
+    OptimiseComp (ArrowArr _) (ArrowArr c) = ArrowArr c
+    OptimiseComp ArrowDup ArrowDropL = ArrowId
+    OptimiseComp ArrowDup ArrowDropR = ArrowId
+    OptimiseComp _ (ArrowConst c) = ArrowConst c
+    OptimiseComp ar ArrowId = ar
+    OptimiseComp ArrowId ar = ar
+    OptimiseComp ar ar' = ArrowGGG ar ar'
 
-optimiseComp :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (OptimiseComp ar ar' b) a c
+optimiseComp :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (OptimiseComp ar ar') a c
 optimiseComp (Arr f) (Arr g) = Arr (g . f)
 optimiseComp Dup DropL = Id
 optimiseComp Dup DropR = Id
