@@ -26,6 +26,8 @@ source-repository head
 library
   exposed-modules:
       AFRP
+      AFRPHelpers
+      AFRPTy
       Control.Effect
       Data.Memory.Dependencies
       Data.Memory.EnvUtil
@@ -51,9 +53,7 @@ library
       GenProc.ProcTH
       GenProc.TransformProc
       GraphRearrange
-      MakeMIO
       MonadRW
-      Naming
       RAFRP
       Rearrange
       GenerateProcCode

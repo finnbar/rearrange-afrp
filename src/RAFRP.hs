@@ -1,12 +1,10 @@
 {-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables, Strict #-}
 
-module RAFRP (module AFRP, module GenProc.GeneralisedArrow, makeAFRP, toRearrangeable) where
+module RAFRP (module AFRP, module AFRPHelpers, makeAFRP, toRearrangeable) where
 
 import AFRP
-import MakeMIO
-import Naming
+import AFRPHelpers
 import Rearrange
-import GenProc.GeneralisedArrow
 
 import Data.Type.Set hiding (Proxy(..))
 import Data.Proxy
