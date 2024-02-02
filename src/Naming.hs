@@ -127,83 +127,72 @@ instance RepeatSub arr a b c c arr b c 'True where
     repeatSub _ afrp = afrp
 
 -- If not, we must go again.
-instance (ir ~ MakeInputRename d,
-    UpdateInputs arr (PN a c) (PN b d) arr' (PN a c') (PN b' d') (PairIR EmptyIR ir) ir',
+instance (sub ~ ToSubstitution c d,
+    Substitute arr (PN a c) (PN b d) arr' (PN a c') (PN b' d') sub,
     -- Then recursively call:
     RepeatSub arr' a b' c' d' arr'' b'' c'' (c' == d')) =>
     RepeatSub arr a b c d arr'' b'' c'' 'False where
     
-    repeatSub Proxy afrp = let
-        (afrp', _) = updateInputs afrp (Proxy :: Proxy (PairIR EmptyIR ir))
-        in repeatSub (Proxy :: Proxy (c' == d')) afrp'
+    repeatSub Proxy afrp =
+        repeatSub (Proxy :: Proxy (c' == d')) (substitute afrp (Proxy :: Proxy sub))
 
--- SIMPLER SUBSTITUTION
--- Rather than doing a name-based substitution, we do an inputs-based one.
+-- Within x, substitutes all Nat in s' with their equivalent in s.
+-- Important note: we always substitute output name in place of input name.
+-- This is to avoid replacing something defined outside of the loop, which could be a loop output.
+-- Sub a b => whenever you see a, replace it with b
+data Substitution = Sub Nat Nat
 
-data InputRename sk where
-    Renamed :: Nat -> InputRename O
-    Unchanged :: InputRename O
-    PairIR :: InputRename l -> InputRename r -> InputRename (l ::: r)
-    EmptyIR :: InputRename sk
+type ToSubstitution :: Desc' d -> Desc' d -> [Substitution]
+type family ToSubstitution d d' where
+    ToSubstitution (PN l r) (PN l' r') = Combine (ToSubstitution l l') (ToSubstitution r r')
+    -- Whenever you see the input name n, replace it with the output name n'.
+    ToSubstitution (VN n a) (VN n' a) = '[Sub n n']
 
-type IRSubst :: Desc' sk -> InputRename sk -> Desc' sk
-type family IRSubst desc' ir where
-    IRSubst (VN n a) (Renamed n') = VN n' a
-    IRSubst (VN n a) Unchanged = VN n a
-    IRSubst (PN l r) (PairIR il ir) = PN (IRSubst l il) (IRSubst r ir)
-    IRSubst t EmptyIR = t
+type ApplySub :: Desc' a -> Substitution -> Desc' a
+type family ApplySub n sub where
+    ApplySub (PN l r) sub = PN (ApplySub l sub) (ApplySub r sub)
+    ApplySub (VN n a) (Sub n n') = VN n' a
+    ApplySub (VN n a) (Sub x y)  = VN n a
 
-type MakeInputRename :: Desc' sk -> InputRename sk
-type family MakeInputRename desc' where
-    MakeInputRename (VN n a) = Renamed n
-    MakeInputRename (PN l r) = PairIR (MakeInputRename l) (MakeInputRename r)
+type Subst :: Desc' a -> [Substitution] -> Desc' a
+type family Subst x sub where
+    Subst desc (sub : xs) = Subst (ApplySub desc sub) xs
+    Subst desc '[] = desc
 
-type UpdateInputs :: Arrow' sk sk' -> Desc' sk -> Desc' sk' -> Arrow' sk sk' -> Desc' sk -> Desc' sk' -> InputRename sk -> InputRename sk' -> Constraint
-class UpdateInputs ar a b ar' a' b' ir ir' | ar a b ir -> ar' a' b' ir' where
-    updateInputs :: AFRP' ar a b -> Proxy ir -> (AFRP' ar' a' b', Proxy ir')
+class Substitute arr a b arr' a' b' sub | arr a b sub -> arr' a' b' where
+    substitute :: AFRP' arr a b -> Proxy sub -> AFRP' arr' a' b'
 
-instance (IRSubst a l ~ a', IRSubst b r ~ b') =>
-    UpdateInputs ArrowDropL' (PN a b) b ArrowDropL' (PN a' b') b' (PairIR l r) r where
-        updateInputs DropL' _ = (DropL', Proxy :: Proxy r)
+instance (a' ~ Subst a sub) => Substitute ArrowId' a a ArrowId' a' a' sub where
+    substitute Id' _ = Id'
 
-instance (IRSubst a l ~ a', IRSubst b r ~ b') =>
-    UpdateInputs ArrowDropR' (PN a b) a ArrowDropR' (PN a' b') a' (PairIR l r) l where
-        updateInputs DropR' _ = (DropR', Proxy :: Proxy l)
+instance (a' ~ Subst a sub, b' ~ Subst b sub) =>
+    Substitute ArrowDropL' (PN a b) b ArrowDropL' (PN a' b') b' sub where
+    substitute DropL' _ = DropL'
 
-instance (IRSubst a ir ~ a') =>
-    UpdateInputs ArrowId' a a ArrowId' a' a' ir ir where
-        updateInputs Id' prox = (Id', prox)
+instance (a' ~ Subst a sub, b' ~ Subst b sub) =>
+    Substitute ArrowDropR' (PN a b) a ArrowDropR' (PN a' b') a' sub where
+    substitute DropR' _ = DropR'
 
-instance (IRSubst a ir ~ a') =>
-    UpdateInputs ArrowDup' a (PN a a) ArrowDup' a' (PN a' a') ir (PairIR ir ir) where
-        updateInputs Dup' _ = (Dup', Proxy :: Proxy (PairIR ir ir))
+instance (a' ~ Subst a sub) =>
+    Substitute ArrowDup' a (PN a a) ArrowDup' a' (PN a' a') sub where
+    substitute Dup' _ = Dup'
 
-instance (IRSubst a ir ~ a', AsDesc a ~ AsDesc a') =>
-    UpdateInputs ArrowArr' a b ArrowArr' a' b ir EmptyIR where
-        updateInputs (Arr' f) _ = (Arr' f, Proxy :: Proxy EmptyIR)
+instance (a' ~ Subst a sub, b' ~ Subst b sub, AsDesc a ~ AsDesc a', AsDesc b ~ AsDesc b') =>
+    Substitute ArrowArr' a b ArrowArr' a' b' sub where
+    substitute (Arr' f) _ = Arr' f
 
-instance (IRSubst a ir ~ a', AsDesc a ~ AsDesc a') =>
-    UpdateInputs ArrowPre' a b ArrowPre' a' b ir EmptyIR where
-        updateInputs (Pre' v) _ = (Pre' v, Proxy :: Proxy EmptyIR)
+instance (b ~ Subst a sub, b' ~ Subst a' sub, AsDesc a ~ AsDesc b, AsDesc a' ~ AsDesc b') =>
+    Substitute ArrowPre' a a' ArrowPre' b b' sub where
+    substitute (Pre' v) _ = Pre' v
 
-instance (UpdateInputs arl a b arl' a' b' ir ir', UpdateInputs arr b c arr' b' c' ir' ir'') =>
-    UpdateInputs (ArrowGGG' arl arr b) a c (ArrowGGG' arl' arr' b') a' c' ir ir'' where
-        updateInputs (f :>>>:: g) prox = let
-            (f', prox') = updateInputs f prox
-            (g', prox'') = updateInputs g prox'
-            in (f' :>>>:: g', prox'')
+instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr b c arrr' b' c' sub) =>
+    Substitute (ArrowGGG' arrl arrr b) a c (ArrowGGG' arrl' arrr' b') a' c' sub where
+    substitute (f :>>>:: g) sub = substitute f sub :>>>:: substitute g sub
 
-instance (UpdateInputs arl a b arl' a' b' irl irl', UpdateInputs arr c d arr' c' d' irr irr') =>
-    UpdateInputs (ArrowSSS' arl arr) (PN a c) (PN b d)
-    (ArrowSSS' arl' arr') (PN a' c') (PN b' d') (PairIR irl irr) (PairIR irl' irr') where
-        updateInputs (f :***:: g) _ = let
-            (f', _) = updateInputs f (Proxy :: Proxy irl)
-            (g', _) = updateInputs g (Proxy :: Proxy irr)
-            in (f' :***:: g', Proxy :: Proxy (PairIR irl' irr'))
+instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr c d arrr' c' d' sub) =>
+    Substitute (ArrowSSS' arrl arrr) (PN a c) (PN b d) (ArrowSSS' arrl' arrr') (PN a' c') (PN b' d') sub where
+    substitute (f :***:: g) sub = substitute f sub :***:: substitute g sub
 
--- TODO This is causing issues
-instance (UpdateInputs ar (PN a c) (PN b c) ar' (PN a' c') (PN b' c') (PairIR ir EmptyIR) (PairIR ir' EmptyIR)) =>
-    UpdateInputs (ArrowLoop' ar c) a b (ArrowLoop' ar' c') a' b' ir ir' where
-        updateInputs (Loop' f) _ = let
-            (f', _) = updateInputs f (Proxy :: Proxy (PairIR ir EmptyIR))
-            in (Loop' f', Proxy :: Proxy ir')
+instance (Substitute arr (PN a c) (PN b c) arr' (PN a' c') (PN b' c') sub) =>
+    Substitute (ArrowLoop' arr c) a b (ArrowLoop' arr' c') a' b' sub where
+    substitute (Loop' f) sub = Loop' (substitute f sub)
