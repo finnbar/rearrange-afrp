@@ -51,9 +51,9 @@ data Arrow' ar ar' where
     ArrowDropR' :: Arrow' (a ::: b) a
     ArrowDup' :: Arrow' a (a ::: a)
     ArrowConst' :: Desc' b -> Arrow' a b
-    ArrowArr' :: Desc' b -> Arrow' a b
-    ArrowPre' :: Desc' a -> Arrow' a a
-    ArrowGGG' :: Arrow' a b -> Arrow' b c -> Arrow' a c
+    ArrowArr' :: Arrow' a b
+    ArrowPre' :: Arrow' a a
+    ArrowGGG' :: Arrow' a b -> Arrow' b c -> Desc' b -> Arrow' a c
     ArrowSSS' :: Arrow' a b -> Arrow' a' b' -> Arrow' (a ::: a') (b ::: b')
     ArrowLoop' :: Arrow' (a ::: c) (b ::: c) -> Desc' c -> Arrow' a b
 
@@ -72,8 +72,8 @@ data AFRP' arrow a b where
     -- Thus we only need Drop and Dup.
 
     -- Arrows
-    Arr' :: (Val (AsDesc a) -> Val (AsDesc b)) -> AFRP' (ArrowArr' b) a b
-    Pre' :: Val (AsDesc a') -> AFRP' (ArrowPre' a') a a'
-    (:>>>::) :: AFRP' ar a b -> AFRP' ar' b c -> AFRP' (ArrowGGG' ar ar') a c
+    Arr' :: (Val (AsDesc a) -> Val (AsDesc b)) -> AFRP' ArrowArr' a b
+    Pre' :: Val (AsDesc a') -> AFRP' ArrowPre' a a'
+    (:>>>::) :: AFRP' ar a b -> AFRP' ar' b c -> AFRP' (ArrowGGG' ar ar' b) a c
     (:***::) :: AFRP' ar a b -> AFRP' ar' a' b' -> AFRP' (ArrowSSS' ar ar') (PN a a') (PN b b')
     Loop' :: AFRP' ar (PN a c) (PN b c) -> AFRP' (ArrowLoop' ar c) a b
