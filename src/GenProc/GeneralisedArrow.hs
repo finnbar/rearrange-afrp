@@ -43,11 +43,11 @@ data Arrow ar ar' where
     ArrowDropL :: Arrow (a ::: b) b
     ArrowDropR :: Arrow (a ::: b) a
     ArrowDup :: Arrow a (a ::: a)
-    ArrowConst :: Desc b -> Arrow a b
+    ArrowConst :: Arrow a b
 
-    ArrowArr :: Desc b -> Arrow a b
+    ArrowArr :: Arrow a b
     ArrowPre :: Arrow a a
-    ArrowGGG :: Arrow a b -> Arrow b c -> Arrow a c
+    ArrowGGG :: Arrow a b -> Arrow b c -> Desc b -> Arrow a c
     ArrowSSS :: Arrow a b -> Arrow a' b' -> Arrow (a ::: a') (b ::: b')
     ArrowApp :: Arrow (O ::: a) b
     ArrowLoop :: Arrow (a ::: c) (b ::: c) -> Desc c -> Arrow a b
@@ -64,16 +64,16 @@ data GenArrow arrow a b where
     DropL :: GenArrow ArrowDropL (P a b) b
     DropR :: GenArrow ArrowDropR (P a b) a
     Dup :: GenArrow ArrowDup a (P a a)
-    Constant :: Val a -> GenArrow (ArrowConst a) x a
+    Constant :: Val a -> GenArrow ArrowConst x a
     -- NB Swap = Dup >>> (DropL *** DropR)
     -- Assoc = Dup >>> ((Id *** DropR) *** (DropL >>> DropL))
     -- Unassoc = Dup >>> ((DropR >>> DropR) *** (DropL *** Id))
     -- Thus we only need Drop and Dup.
 
     -- Arrows
-    Arr :: (Val a -> Val b) -> GenArrow (ArrowArr b) a b
+    Arr :: (Val a -> Val b) -> GenArrow ArrowArr a b
     Pre :: Val a -> GenArrow ArrowPre a a
-    (:>>>:) :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (ArrowGGG ar ar') a c
+    (:>>>:) :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (ArrowGGG ar ar' b) a c
     (:***:) :: GenArrow ar a b -> GenArrow ar' a' b' -> GenArrow (ArrowSSS ar ar') (P a a') (P b b')
     App :: GenArrow ArrowApp (P (V (GenArrow ar b c)) b) c
     Loop :: GenArrow ar (P a c) (P b c) -> GenArrow (ArrowLoop ar c) a b
@@ -99,7 +99,7 @@ instance Show (GenArrow ar a b) where
 id :: GenArrow ArrowId a a
 id = Id
 
-(>>>) :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (ArrowGGG ar ar') a c
+(>>>) :: GenArrow ar a b -> GenArrow ar' b c -> GenArrow (ArrowGGG ar ar' b) a c
 f >>> g = f :>>>: g
 
 (***) :: GenArrow ar a b -> GenArrow ar' a' b' -> GenArrow (ArrowSSS ar ar') (P a a') (P b b')
@@ -114,7 +114,7 @@ dropL = DropL
 dropR :: GenArrow ArrowDropR (P a b) a
 dropR = DropR
 
-constant :: Val a -> GenArrow (ArrowConst a) x a
+constant :: Val a -> GenArrow ArrowConst x a
 constant = Constant
 
 first :: GenArrow ar a b -> GenArrow (ArrowSSS ar ArrowId) (P a c) (P b c)
@@ -123,13 +123,13 @@ first = (*** id)
 second :: GenArrow ar a b -> GenArrow (ArrowSSS ArrowId ar) (P c a) (P c b)
 second = (id ***)
 
-arr :: (Val a -> Val b) -> GenArrow (ArrowArr b) a b
+arr :: (Val a -> Val b) -> GenArrow ArrowArr a b
 arr = Arr
 
 -- A few helpers for arr:
-arr11 :: (a -> b) -> GenArrow (ArrowArr (V b)) (V a) (V b)
+arr11 :: (a -> b) -> GenArrow ArrowArr (V a) (V b)
 arr11 f = arr $ \(One x) -> One (f x)
-arr21 :: (a -> b -> c) -> GenArrow (ArrowArr (V c)) (P (V a) (V b)) (V c)
+arr21 :: (a -> b -> c) -> GenArrow ArrowArr (P (V a) (V b)) (V c)
 arr21 f = arr $ \(Pair (One x) (One y)) -> One (f x y)
 
 app :: GenArrow ArrowApp (P (V (GenArrow ar b c)) b) c
@@ -141,7 +141,7 @@ loop = Loop
 (+++) :: GenArrow ar a b -> GenArrow ar' c d -> GenArrow (ArrowPPP ar ar') (C a c) (C b d)
 f +++ g = f :+++: g
 
-(|||) :: GenArrow ar a b -> GenArrow ar' c b -> GenArrow (ArrowGGG (ArrowPPP ar ar') (ArrowArr b)) (C a c) b
+(|||) :: GenArrow ar a b -> GenArrow ar' c b -> GenArrow (ArrowGGG (ArrowPPP ar ar') ArrowArr (C b b)) (C a c) b
 f ||| g = f +++ g >>> arr untag
     where
         untag :: Val (C b b) -> Val b

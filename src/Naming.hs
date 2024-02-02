@@ -14,7 +14,6 @@ import Data.Type.Equality
 
 import qualified Rearrange
 import AFRP
-import Unsafe.Coerce
 
 -- Have the ability to make Fresh names to fill in the gaps in some Desc'.
 
@@ -55,7 +54,7 @@ newBuildState = MkBuildState HNil
 type AssignMemory :: Arrow ar ar' -> Desc ar -> Desc ar'
     -> Arrow' ar ar' -> Desc' ar -> Desc' ar'
     -> FreshState -> FreshState -> Constraint
-class AssignMemory arr a b arr' a' b' fs fs' | arr a a' fs -> arr' b b' fs' where
+class AssignMemory arr a b arr' a' b' fs fs' | arr a b a' fs -> arr' b' fs' where
     assignMemory :: AFRP arr a b -> Proxy a' -> BuildState fs ->
         IO (AFRP' arr' a' b', Proxy b', BuildState fs')
 
@@ -72,36 +71,29 @@ instance AssignMemory ArrowDup a (P a a) ArrowDup' a' (PN a' a') fs fs where
     assignMemory Dup prox bs = return (Dup', pairProx prox prox, bs)
 
 instance (Fresh a fs a' fs', x ~ AsDesc x', a ~ AsDesc a') =>
-    AssignMemory (ArrowConst a) x a (ArrowConst' a') x' a' fs fs' where
+    AssignMemory ArrowConst x a (ArrowConst' a') x' a' fs fs' where
     assignMemory (Constant x) _ bs = do
         (prox', bs') <- fresh bs (Proxy :: Proxy a)
         return (Constant' x, prox', bs')
 
 instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
-    AssignMemory (ArrowArr b) a b (ArrowArr' b') a' b' fs fs' where
+    AssignMemory ArrowArr a b ArrowArr' a' b' fs fs' where
     assignMemory (Arr f) _ bs = do
         (prox', bs') <- fresh bs (Proxy :: Proxy b)
         return (Arr' f, prox', bs')
 
 instance (Fresh a fs b' fs', a ~ AsDesc a', a ~ AsDesc b') =>
-    AssignMemory ArrowPre a a (ArrowPre' b') a' b' fs fs' where
+    AssignMemory ArrowPre a a ArrowPre' a' b' fs fs' where
     assignMemory (Pre v) _ bs = do
         (prox', bs') <- fresh bs (Proxy :: Proxy a)
         return (Pre' v, prox', bs')
 
 instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' b' c' fs' fs'') =>
-    AssignMemory (ArrowGGG arrl arrr) a c (ArrowGGG' arrl' arrr') a' c' fs fs'' where
-    assignMemory fg prox bs = do
-        let (f, g) = splitGGG fg
+    AssignMemory (ArrowGGG arrl arrr b) a c (ArrowGGG' arrl' arrr' b') a' c' fs fs'' where
+    assignMemory (f :>>>: g) prox bs = do
         (f', prox', bs') <- assignMemory f prox bs
         (g', prox'', bs'') <- assignMemory g prox' bs'
         return (f' :>>>:: g', prox'', bs'')
-    
--- NOTE: We unsafeCoerce here.
--- This is because we know that AssignMemory will pick the b corresponding to the b hidden within the :>>>: constructor,
--- but have no easy way to persuade Haskell of this.
-splitGGG :: GenArrow (ArrowGGG arrl arrr) a c -> (GenArrow arrl a b, GenArrow arrr b c)
-splitGGG (f :>>>: g) = (unsafeCoerce f, unsafeCoerce g)
 
 instance (AssignMemory arrl a c arrl' a' c' fs fs',
     AssignMemory arrr b d arrr' b' d' fs' fs'') =>
@@ -167,7 +159,7 @@ type family MakeInputRename desc' where
     MakeInputRename (PN l r) = PairIR (MakeInputRename l) (MakeInputRename r)
 
 type UpdateInputs :: Arrow' sk sk' -> Desc' sk -> Desc' sk' -> Arrow' sk sk' -> Desc' sk -> Desc' sk' -> InputRename sk -> InputRename sk' -> Constraint
-class UpdateInputs ar a b ar' a' b' ir ir' | ar a ir -> ar' b a' b' ir' where
+class UpdateInputs ar a b ar' a' b' ir ir' | ar a b ir -> ar' a' b' ir' where
     updateInputs :: AFRP' ar a b -> Proxy ir -> (AFRP' ar' a' b', Proxy ir')
 
 instance (IRSubst a l ~ a', IRSubst b r ~ b') =>
@@ -187,23 +179,19 @@ instance (IRSubst a ir ~ a') =>
         updateInputs Dup' _ = (Dup', Proxy :: Proxy (PairIR ir ir))
 
 instance (IRSubst a ir ~ a', AsDesc a ~ AsDesc a') =>
-    UpdateInputs (ArrowArr' b) a b (ArrowArr' b) a' b ir EmptyIR where
+    UpdateInputs ArrowArr' a b ArrowArr' a' b ir EmptyIR where
         updateInputs (Arr' f) _ = (Arr' f, Proxy :: Proxy EmptyIR)
 
 instance (IRSubst a ir ~ a', AsDesc a ~ AsDesc a') =>
-    UpdateInputs (ArrowPre' b) a b (ArrowPre' b) a' b ir EmptyIR where
+    UpdateInputs ArrowPre' a b ArrowPre' a' b ir EmptyIR where
         updateInputs (Pre' v) _ = (Pre' v, Proxy :: Proxy EmptyIR)
 
 instance (UpdateInputs arl a b arl' a' b' ir ir', UpdateInputs arr b c arr' b' c' ir' ir'') =>
-    UpdateInputs (ArrowGGG' arl arr) a c (ArrowGGG' arl' arr') a' c' ir ir'' where
-        updateInputs fg prox = let
-            (f, g) = splitGGG' fg
+    UpdateInputs (ArrowGGG' arl arr b) a c (ArrowGGG' arl' arr' b') a' c' ir ir'' where
+        updateInputs (f :>>>:: g) prox = let
             (f', prox') = updateInputs f prox
             (g', prox'') = updateInputs g prox'
             in (f' :>>>:: g', prox'')
-
-splitGGG' :: AFRP' (ArrowGGG' arrl arrr) a c -> (AFRP' arrl a b, AFRP' arrr b c)
-splitGGG' (f :>>>:: g) = (unsafeCoerce f, unsafeCoerce g)
 
 instance (UpdateInputs arl a b arl' a' b' irl irl', UpdateInputs arr c d arr' c' d' irr irr') =>
     UpdateInputs (ArrowSSS' arl arr) (PN a c) (PN b d)
@@ -213,6 +201,7 @@ instance (UpdateInputs arl a b arl' a' b' irl irl', UpdateInputs arr c d arr' c'
             (g', _) = updateInputs g (Proxy :: Proxy irr)
             in (f' :***:: g', Proxy :: Proxy (PairIR irl' irr'))
 
+-- TODO This is causing issues
 instance (UpdateInputs ar (PN a c) (PN b c) ar' (PN a' c') (PN b' c') (PairIR ir EmptyIR) (PairIR ir' EmptyIR)) =>
     UpdateInputs (ArrowLoop' ar c) a b (ArrowLoop' ar' c') a' b' ir ir' where
         updateInputs (Loop' f) _ = let
