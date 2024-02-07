@@ -3,7 +3,7 @@
 module Naming (AssignMemory(..), newBuildState, EmptyFreshState, Fresh(..),
     BuildState(..), EnvFromBuildState, FreshState) where
 
--- AssignMemory transforms an AFRP into an AFRP'.
+-- AssignMemory transforms an AFRP into an AFRPAnn.
 
 import GHC.TypeLits
 import Data.Type.HList
@@ -15,7 +15,7 @@ import Data.Type.Equality
 import qualified Rearrange
 import AFRP
 
--- Have the ability to make Fresh names to fill in the gaps in some Desc'.
+-- Have the ability to make Fresh names to fill in the gaps in some DescAnn.
 
 type FreshState = (Nat, [*])
 type BuildState :: FreshState -> *
@@ -23,7 +23,7 @@ type family EnvFromBuildState (x :: FreshState) where
     EnvFromBuildState '(n, env) = env
 newtype BuildState (fs :: FreshState) = MkBuildState (HList (EnvFromBuildState fs))
 
-type Fresh :: forall s. Desc s -> FreshState -> Desc' s -> FreshState -> Constraint
+type Fresh :: forall s. Desc s -> FreshState -> DescAnn s -> FreshState -> Constraint
 class Fresh d fs d' fs' | d fs -> d' fs' where
     -- Create a fresh undefined variable.
     fresh :: BuildState fs -> Proxy d
@@ -63,11 +63,11 @@ newBuildState = MkBuildState HNil
 -- We therefore assignMemory as normal with various names, and then unify those that should
 -- be the same with Substitute.
 type AssignMemory :: Arrow ar ar' -> Desc ar -> Desc ar'
-    -> Arrow' ar ar' -> Desc' ar -> Desc' ar'
+    -> AFRPConAnn ar ar' -> DescAnn ar -> DescAnn ar'
     -> FreshState -> FreshState -> Constraint
 class AssignMemory arr a b arr' a' b' fs fs' | arr a b a' fs -> arr' b' fs' where
     assignMemory :: AFRP arr a b -> Proxy a' -> BuildState fs ->
-        IO (AFRP' arr' a' b', Proxy b', BuildState fs')
+        IO (AFRPAnn arr' a' b', Proxy b', BuildState fs')
 
 instance AssignMemory ArrowId a a ArrowId' a' a' fs fs where
     assignMemory Id prox bs = return (Id', prox, bs)
@@ -119,7 +119,7 @@ instance (AssignMemory arrl a c arrl' a' c' fs fs',
 -- For loops:
 -- Make Fresh variables for the second input, use them to get the second output and then unify.
 instance (Fresh c fs c' fs',
-    -- AssignMemory the body once with the updated input Desc'
+    -- AssignMemory the body once with the updated input DescAnn
     AssignMemory arr (P a c) (P b c) arr' (PN a' c') (PN b' d') fs' fs'',
     -- Then repeatedly substitute until the looped desc is constant.
     RepeatSub arr' a' b' c' d' arr'' b'' c'' (c' == d')) =>
@@ -131,7 +131,7 @@ instance (Fresh c fs c' fs',
         return (Loop' f'', Proxy :: Proxy b'', bs'')
 
 class RepeatSub arr a b c d arr' b' c' eq | arr a b c d eq -> arr' b' c' where
-    repeatSub :: Proxy eq -> AFRP' arr (PN a c) (PN b d) -> AFRP' arr' (PN a c') (PN b' c')
+    repeatSub :: Proxy eq -> AFRPAnn arr (PN a c) (PN b d) -> AFRPAnn arr' (PN a c') (PN b' c')
 
 -- If we already have something of the right form, we are done.
 instance RepeatSub arr a b c c arr b c 'True where
@@ -153,25 +153,25 @@ instance (sub ~ ToSubstitution c d,
 -- Sub a b => whenever you see a, replace it with b
 data Substitution = Sub Nat Nat
 
-type ToSubstitution :: Desc' d -> Desc' d -> [Substitution]
+type ToSubstitution :: DescAnn d -> DescAnn d -> [Substitution]
 type family ToSubstitution d d' where
     ToSubstitution (PN l r) (PN l' r') = Combine (ToSubstitution l l') (ToSubstitution r r')
     -- Whenever you see the input name n, replace it with the output name n'.
     ToSubstitution (VN n a) (VN n' a) = '[Sub n n']
 
-type ApplySub :: Desc' a -> Substitution -> Desc' a
+type ApplySub :: DescAnn a -> Substitution -> DescAnn a
 type family ApplySub n sub where
     ApplySub (PN l r) sub = PN (ApplySub l sub) (ApplySub r sub)
     ApplySub (VN n a) (Sub n n') = VN n' a
     ApplySub (VN n a) (Sub x y)  = VN n a
 
-type Subst :: Desc' a -> [Substitution] -> Desc' a
+type Subst :: DescAnn a -> [Substitution] -> DescAnn a
 type family Subst x sub where
     Subst desc (sub : xs) = Subst (ApplySub desc sub) xs
     Subst desc '[] = desc
 
 class Substitute arr a b arr' a' b' sub | arr a b sub -> arr' a' b' where
-    substitute :: AFRP' arr a b -> Proxy sub -> AFRP' arr' a' b'
+    substitute :: AFRPAnn arr a b -> Proxy sub -> AFRPAnn arr' a' b'
 
 instance (a' ~ Subst a sub) => Substitute ArrowId' a a ArrowId' a' a' sub where
     substitute Id' _ = Id'

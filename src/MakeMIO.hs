@@ -13,7 +13,7 @@ import Data.Memory.Memory (MemoryInv)
 import Data.Kind (Constraint)
 import Data.Proxy
 
-type ReadCells :: forall (ar :: Arity). Desc' ar -> MemState -> Constraint
+type ReadCells :: forall (ar :: SKind). DescAnn ar -> MemState -> Constraint
 class ReadCells ac res | ac -> res where
     readCells :: Proxy ac -> Memory IO res (Val (AsDesc ac))
 
@@ -27,7 +27,7 @@ instance (ReadCells lc lr, ReadCells rc rr, res ~ MemoryPlus lr rr, MemoryInv lr
         left <- readCells lp
         Pair left <$> readCells rp
 
-type WriteCells :: forall (ar :: Arity). Desc' ar -> MemState -> Constraint
+type WriteCells :: forall (ar :: SKind). DescAnn ar -> MemState -> Constraint
 class WriteCells ac res | ac -> res where
     writeCells :: Proxy ac -> Val (AsDesc ac) -> Memory IO res ()
 
@@ -41,7 +41,7 @@ instance (WriteCells lc lr, WriteCells rc rr, res ~ MemoryPlus lr rr, MemoryInv 
         writeCells l a
         writeCells r b
 
-type WriteCellsAfter :: forall (ar :: Arity). Desc' ar -> MemState -> Constraint
+type WriteCellsAfter :: forall (ar :: SKind). DescAnn ar -> MemState -> Constraint
 class WriteCellsAfter ac res | ac -> res where
     writeCellsAfter :: Proxy ac -> Val (AsDesc ac) -> Memory IO res ()
 
@@ -75,65 +75,65 @@ instance (ProxToRef l env, ProxToRef r env) => ProxToRef (PN l r) env where
 -- then a user will have to type `arr f bs rf` with the correct fs' and prog.
 -- There might be a world where a user can say that the type is (Arr <a bunch of arguments>) but that seems worse than the current one.
 
-type AsMemory :: forall (ar :: Arity) (br :: Arity).
-    Arrow' ar br -> Desc' ar -> Desc' br -> [*] -> Constraint
-class AsMemory arr a b prog | arr a b -> prog where
-    toProgram :: AFRP' arr a b -> Proxy a -> IO (HList prog, Proxy b)
+type ToMIO :: forall (ar :: SKind) (br :: SKind).
+    AFRPConAnn ar br -> DescAnn ar -> DescAnn br -> [*] -> Constraint
+class ToMIO arr a b prog | arr a b -> prog where
+    toMIO :: AFRPAnn arr a b -> Proxy a -> IO (HList prog, Proxy b)
 
-instance AsMemory ArrowId' a a '[] where
-    toProgram Id' prox = Prelude.return (HNil, prox)
+instance ToMIO ArrowId' a a '[] where
+    toMIO Id' prox = Prelude.return (HNil, prox)
 
-instance AsMemory ArrowDropL' (PN a b) b '[] where
-    toProgram DropL' prox = let (_, br) = splitProx prox in Prelude.return (HNil, br)
+instance ToMIO ArrowDropL' (PN a b) b '[] where
+    toMIO DropL' prox = let (_, br) = splitProx prox in Prelude.return (HNil, br)
 
-instance AsMemory ArrowDropR' (PN a b) a '[] where
-    toProgram DropR' prox = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
+instance ToMIO ArrowDropR' (PN a b) a '[] where
+    toMIO DropR' prox = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
 
-instance AsMemory ArrowDup' a (PN a a) '[] where
-    toProgram Dup' prox = Prelude.return (HNil, pairProx prox prox)
+instance ToMIO ArrowDup' a (PN a a) '[] where
+    toMIO Dup' prox = Prelude.return (HNil, pairProx prox prox)
 
-instance AsMemory (ArrowConst' a) x a '[] where
-    toProgram (Constant' c) _ = do
+instance ToMIO (ArrowConst' a) x a '[] where
+    toMIO (Constant' c) _ = do
         let outprox = Proxy :: Proxy a
         Prelude.return (HNil, outprox)
 
 instance (ReadCells a ar, WriteCells b br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
-    AsMemory ArrowArr' a b prog where
-        toProgram (Arr' f) inprox = do
+    ToMIO ArrowArr' a b prog where
+        toMIO (Arr' f) inprox = do
             let outprox = Proxy :: Proxy b
                 comp = (f <$> readCells inprox) Rearrange.>>= writeCells outprox
             Prelude.return (comp :+: HNil, outprox)
 
 instance (ReadCells a ar, WriteCellsAfter a' ar', AsDesc a' ~ AsDesc a,
     MemoryInv ar ar', mems ~ MemoryPlus ar ar') =>
-    AsMemory ArrowPre' a a' '[Memory IO mems ()] where
-        toProgram (Pre' v) inprox = do
+    ToMIO ArrowPre' a a' '[Memory IO mems ()] where
+        toMIO (Pre' v) inprox = do
             let outprox = Proxy :: Proxy a'
                 comp = readCells inprox Rearrange.>>= writeCellsAfter outprox
             Prelude.return (comp :+: HNil, outprox)
 
-instance (AsMemory larr a b progl, AsMemory rarr b c progr,
+instance (ToMIO larr a b progl, ToMIO rarr b c progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowGGG' larr rarr b) a c prog where
-        toProgram (f :>>>:: g) inprox = do
-            (compf, midprox) <- toProgram f inprox
-            (compg, outprox) <- toProgram g midprox
+    ToMIO (ArrowGGG' larr rarr b) a c prog where
+        toMIO (f :>>>:: g) inprox = do
+            (compf, midprox) <- toMIO f inprox
+            (compg, outprox) <- toMIO g midprox
             Prelude.return (hCombine compf compg, outprox)
 
-instance (AsMemory larr la lb progl, AsMemory rarr ra rb progr,
+instance (ToMIO larr la lb progl, ToMIO rarr ra rb progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowSSS' larr rarr) (PN la ra) (PN lb rb) prog where
-        toProgram (f :***:: g) prox = do
+    ToMIO (ArrowSSS' larr rarr) (PN la ra) (PN lb rb) prog where
+        toMIO (f :***:: g) prox = do
             let (inl, inr) = splitProx prox
-            (compf, outl) <- toProgram f inl
-            (compg, outr) <- toProgram g inr
+            (compf, outl) <- toMIO f inl
+            (compg, outr) <- toMIO g inr
             Prelude.return (hCombine compf compg, pairProx outl outr)
 
-instance (AsMemory arr (PN a c) (PN b c) prog) =>
-    AsMemory (ArrowLoop' arr c) a b prog where
-        toProgram (Loop' f) inref = do
-            (comp, prox') <- toProgram f (pairProx inref (Proxy :: Proxy c))
+instance (ToMIO arr (PN a c) (PN b c) prog) =>
+    ToMIO (ArrowLoop' arr c) a b prog where
+        toMIO (Loop' f) inref = do
+            (comp, prox') <- toMIO f (pairProx inref (Proxy :: Proxy c))
             let (out, _) = splitProx prox'
             Prelude.return (comp, out)
 
@@ -143,7 +143,7 @@ instance (AsMemory arr (PN a c) (PN b c) prog) =>
 -- This means that if have the output cell of a pre as the output of the entire program, reading it will give
 -- us the _next_ value being returned, not the current one.
 -- We fix this by adding one separate output cell by postcomposing >>> arr id to the input.
-type Augment :: [*] -> Desc' a -> FreshState -> [*] -> Desc' a -> FreshState -> Constraint
+type Augment :: [*] -> DescAnn a -> FreshState -> [*] -> DescAnn a -> FreshState -> Constraint
 class Augment prog a bs prog' a' bs' | prog a bs -> prog' a' bs' where
     augment :: HList prog -> Proxy a -> BuildState bs -> IO (HList prog', Proxy a', BuildState bs')
 

@@ -15,7 +15,7 @@ import Data.Proxy
 makeAFRP :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' env'' prog' prog''.
     (Fresh a EmptyFreshState a' fs,
     AssignMemory arr a b arr' a' b' fs fs',
-    AsMemory arr' a' b' prog,
+    ToMIO arr' a' b' prog,
     Augment prog b' fs' prog' b'' fs'',
     env ~ EnvFromBuildState fs'',
     HReverse env env',
@@ -28,7 +28,7 @@ makeAFRP :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' env'' prog' 
 makeAFRP afrp = do
     (inprox, bs) <- fresh @_ @a newBuildState (Proxy :: Proxy a)
     (afrp', _, bs') <- assignMemory afrp inprox bs
-    (prog, outprox') <- toProgram afrp' (Proxy :: Proxy a')
+    (prog, outprox') <- toMIO afrp' (Proxy :: Proxy a')
     (prog', outprox'', MkBuildState env) <- augment prog outprox' bs'
     let env' = hReverse env
         inref = proxToRef inprox env'
@@ -44,7 +44,7 @@ makeAFRP afrp = do
 toRearrangeable :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' prog'.
     (Fresh a EmptyFreshState a' fs,
     AssignMemory arr a b arr' a' b' fs fs',
-    AsMemory arr' a' b' prog,
+    ToMIO arr' a' b' prog,
     Augment prog b' fs' prog' b'' fs'',
     env ~ EnvFromBuildState fs'',
     HReverse env env',
@@ -54,7 +54,7 @@ toRearrangeable :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' prog'
 toRearrangeable afrp = do
     (inprox, bs) <- fresh @_ @a newBuildState (Proxy :: Proxy a)
     (afrp', _, bs') <- assignMemory afrp inprox bs
-    (prog, outprox') <- toProgram afrp' (Proxy :: Proxy a')
+    (prog, outprox') <- toMIO afrp' (Proxy :: Proxy a')
     (prog', outprox'', MkBuildState env) <- augment prog outprox' bs'
     -- The env must be reversed here because it is constructed in reverse - Fresh prepends
     -- rather than appends.

@@ -9,12 +9,12 @@ import Prelude hiding (id)
 -- We're using the standard SFRP setup rather than classes, as I couldn't think of a way to generalise things nicely.
 -- We gain an additional arity and desc type, :?: and C respectively, which represents when we have a choice of signals.
 
-data Arity where
-    O :: Arity
-    (:::) :: Arity -> Arity -> Arity
-    (:?:) :: Arity -> Arity -> Arity
+data SKind where
+    O :: SKind
+    (:::) :: SKind -> SKind -> SKind
+    (:?:) :: SKind -> SKind -> SKind
 
-type Desc :: Arity -> Type
+type Desc :: SKind -> Type
 data Desc x where
     V :: forall (a :: Type). a -> Desc O
     P :: Desc a -> Desc b -> Desc (a ::: b)
@@ -37,7 +37,7 @@ instance (Show (Val a), Show (Val b)) => Show (Val (C a b)) where
     show (Choice1 a) = "(1 " ++ show a ++ ")"
     show (Choice2 a) = "(2 " ++ show a ++ ")"
 
-type Arrow :: Arity -> Arity -> Type
+type Arrow :: SKind -> SKind -> Type
 data Arrow ar ar' where
     ArrowId :: Arrow a a
     ArrowDropL :: Arrow (a ::: b) b
@@ -56,7 +56,7 @@ data Arrow ar ar' where
 -- Programmers will likely use :: GenArrow _ a b in their code, since _ is entirely inferrable from the constructors.
 -- We need it to implement an GenArrow -> RGenArrow function, as the type of the output cannot solely depend on the value of the input.
 -- (That's dependent types innit.)
-type GenArrow :: forall (ar :: Arity) (ar' :: Arity).
+type GenArrow :: forall (ar :: SKind) (ar' :: SKind).
     Arrow ar ar' -> Desc ar -> Desc ar' -> Type
 data GenArrow arrow a b where
     -- Routing
