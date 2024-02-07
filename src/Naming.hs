@@ -28,13 +28,20 @@ class Fresh d fs d' fs' | d fs -> d' fs' where
     -- Create a fresh undefined variable.
     fresh :: BuildState fs -> Proxy d
         -> IO (Proxy d', BuildState fs')
+    -- Create a fresh variable with the given value.
+    freshInit :: BuildState fs -> Val d
+        -> IO (Proxy d', BuildState fs')
 
-instance (n' ~ n + 1, env' ~ Append (Rearrange.IOCell n a) env) =>
-    Fresh (V a) '(n, env) (VN n a) '(n', env') where
+instance (n' ~ n + 1) =>
+    Fresh (V a) '(n, env) (VN n a) '(n', Rearrange.IOCell n a ': env) where
     fresh (MkBuildState ps) Proxy = do
         ref <- newIORef undefined
         let cell = Rearrange.Cell @_ @_ @IO ref
-        Prelude.return (Proxy, MkBuildState $ hAppend @(Rearrange.IOCell n a) cell ps)
+        Prelude.return (Proxy, MkBuildState $ cell :+: ps)
+    freshInit (MkBuildState ps) (One v) = do
+        ref <- newIORef v
+        let cell = Rearrange.Cell @_ @_ @IO ref
+        Prelude.return (Proxy, MkBuildState $ cell :+: ps)
 
 instance (Fresh l fs lns fs', Fresh r fs' rns fs'') =>
     Fresh (P l r) fs (PN lns rns) fs'' where
@@ -43,6 +50,10 @@ instance (Fresh l fs lns fs', Fresh r fs' rns fs'') =>
         (lp', bs') <- fresh bs lp
         (rp', bs'') <- fresh bs' rp
         Prelude.return (pairProx lp' rp', bs'')
+    freshInit bs (Pair l r) = do
+        (lp, bs') <- freshInit bs l
+        (rp, bs'') <- freshInit bs' r
+        Prelude.return (pairProx lp rp, bs'')
 
 type EmptyFreshState = '(0, '[])
 newBuildState :: BuildState EmptyFreshState
@@ -73,7 +84,7 @@ instance AssignMemory ArrowDup a (P a a) ArrowDup' a' (PN a' a') fs fs where
 instance (Fresh a fs a' fs', x ~ AsDesc x', a ~ AsDesc a') =>
     AssignMemory ArrowConst x a (ArrowConst' a') x' a' fs fs' where
     assignMemory (Constant x) _ bs = do
-        (prox', bs') <- fresh bs (Proxy :: Proxy a)
+        (prox', bs') <- freshInit bs x
         return (Constant' x, prox', bs')
 
 instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
@@ -85,7 +96,7 @@ instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
 instance (Fresh a fs b' fs', a ~ AsDesc a', a ~ AsDesc b') =>
     AssignMemory ArrowPre a a ArrowPre' a' b' fs fs' where
     assignMemory (Pre v) _ bs = do
-        (prox', bs') <- fresh bs (Proxy :: Proxy a)
+        (prox', bs') <- freshInit bs v
         return (Pre' v, prox', bs')
 
 instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' b' c' fs' fs'') =>

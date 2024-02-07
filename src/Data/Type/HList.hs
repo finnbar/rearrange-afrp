@@ -9,7 +9,7 @@ module Data.Type.HList (
     hCombine, Combine,
     hHead, hTail, hAppend, Append,
     FlattenToHList,
-    LookupNth(..)
+    LookupNth(..), hReverse, HReverse,
     ) where
 
 import Data.Type.Utils (Combine)
@@ -65,3 +65,17 @@ instance {-# OVERLAPPING #-} LookupNth 0 (x ': xs) x where
 instance {-# OVERLAPPABLE #-}
     forall n x xs r. (LookupNth (n-1) xs r) => LookupNth n (x ': xs) r where
     lookupNth Proxy (_ :+: vs) = lookupNth (Proxy :: Proxy (n-1)) vs
+
+type HReverse xs xs' = HReverse' xs '[] xs'
+
+hReverse :: HReverse xs xs' => HList xs -> HList xs'
+hReverse xs = hReverse' xs HNil
+
+class HReverse' xs acc xs' | xs acc -> xs' where
+    hReverse' :: HList xs -> HList acc -> HList xs'
+
+instance HReverse' '[] acc acc where
+    hReverse' HNil acc = acc
+
+instance (HReverse' xs (x ': acc) xs') => HReverse' (x ': xs) acc xs' where
+    hReverse' (x :+: xs) acc = hReverse' xs (x :+: acc)

@@ -76,66 +76,64 @@ instance (ProxToRef l env, ProxToRef r env) => ProxToRef (PN l r) env where
 -- There might be a world where a user can say that the type is (Arr <a bunch of arguments>) but that seems worse than the current one.
 
 type AsMemory :: forall (ar :: Arity) (br :: Arity).
-    Arrow' ar br -> Desc' ar -> Desc' br -> [*] -> [*] -> Constraint
-class AsMemory arr a b env prog | arr a b env -> prog where
-    toProgram :: AFRP' arr a b -> Proxy a -> HList env -> IO (HList prog, Proxy b)
+    Arrow' ar br -> Desc' ar -> Desc' br -> [*] -> Constraint
+class AsMemory arr a b prog | arr a b -> prog where
+    toProgram :: AFRP' arr a b -> Proxy a -> IO (HList prog, Proxy b)
 
-instance AsMemory ArrowId' a a env '[] where
-    toProgram Id' prox _ = Prelude.return (HNil, prox)
+instance AsMemory ArrowId' a a '[] where
+    toProgram Id' prox = Prelude.return (HNil, prox)
 
-instance AsMemory ArrowDropL' (PN a b) b env '[] where
-    toProgram DropL' prox _ = let (_, br) = splitProx prox in Prelude.return (HNil, br)
+instance AsMemory ArrowDropL' (PN a b) b '[] where
+    toProgram DropL' prox = let (_, br) = splitProx prox in Prelude.return (HNil, br)
 
-instance AsMemory ArrowDropR' (PN a b) a env '[] where
-    toProgram DropR' prox _ = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
+instance AsMemory ArrowDropR' (PN a b) a '[] where
+    toProgram DropR' prox = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
 
-instance AsMemory ArrowDup' a (PN a a) env '[] where
-    toProgram Dup' prox _ = Prelude.return (HNil, pairProx prox prox)
+instance AsMemory ArrowDup' a (PN a a) '[] where
+    toProgram Dup' prox = Prelude.return (HNil, pairProx prox prox)
 
-instance (ProxToRef a env) => AsMemory (ArrowConst' a) x a env '[] where
-    toProgram (Constant' c) _ env = do
+instance AsMemory (ArrowConst' a) x a '[] where
+    toProgram (Constant' c) _ = do
         let outprox = Proxy :: Proxy a
-        flip writeRef c $ proxToRef outprox env
         Prelude.return (HNil, outprox)
 
 instance (ReadCells a ar, WriteCells b br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
-    AsMemory ArrowArr' a b env prog where
-        toProgram (Arr' f) inprox _ = do
+    AsMemory ArrowArr' a b prog where
+        toProgram (Arr' f) inprox = do
             let outprox = Proxy :: Proxy b
                 comp = (f <$> readCells inprox) Rearrange.>>= writeCells outprox
             Prelude.return (comp :+: HNil, outprox)
 
 instance (ReadCells a ar, WriteCellsAfter a' ar', AsDesc a' ~ AsDesc a,
-    MemoryInv ar ar', mems ~ MemoryPlus ar ar', ProxToRef a' env) =>
-    AsMemory ArrowPre' a a' env '[Memory IO mems ()] where
-        toProgram (Pre' v) inprox env = do
+    MemoryInv ar ar', mems ~ MemoryPlus ar ar') =>
+    AsMemory ArrowPre' a a' '[Memory IO mems ()] where
+        toProgram (Pre' v) inprox = do
             let outprox = Proxy :: Proxy a'
                 comp = readCells inprox Rearrange.>>= writeCellsAfter outprox
-            flip writeRef v $ proxToRef (Proxy :: Proxy a') env
             Prelude.return (comp :+: HNil, outprox)
 
-instance (AsMemory larr a b env progl, AsMemory rarr b c env progr,
+instance (AsMemory larr a b progl, AsMemory rarr b c progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowGGG' larr rarr b) a c env prog where
-        toProgram (f :>>>:: g) inprox env = do
-            (compf, midprox) <- toProgram f inprox env
-            (compg, outprox) <- toProgram g midprox env
+    AsMemory (ArrowGGG' larr rarr b) a c prog where
+        toProgram (f :>>>:: g) inprox = do
+            (compf, midprox) <- toProgram f inprox
+            (compg, outprox) <- toProgram g midprox
             Prelude.return (hCombine compf compg, outprox)
 
-instance (AsMemory larr la lb env progl, AsMemory rarr ra rb env progr,
+instance (AsMemory larr la lb progl, AsMemory rarr ra rb progr,
     prog ~ Combine progl progr) =>
-    AsMemory (ArrowSSS' larr rarr) (PN la ra) (PN lb rb) env prog where
-        toProgram (f :***:: g) prox env = do
+    AsMemory (ArrowSSS' larr rarr) (PN la ra) (PN lb rb) prog where
+        toProgram (f :***:: g) prox = do
             let (inl, inr) = splitProx prox
-            (compf, outl) <- toProgram f inl env
-            (compg, outr) <- toProgram g inr env
+            (compf, outl) <- toProgram f inl
+            (compg, outr) <- toProgram g inr
             Prelude.return (hCombine compf compg, pairProx outl outr)
 
-instance (AsMemory arr (PN a c) (PN b c) env prog) =>
-    AsMemory (ArrowLoop' arr c) a b env prog where
-        toProgram (Loop' f) inref env = do
-            (comp, prox') <- toProgram f (pairProx inref (Proxy :: Proxy c)) env
+instance (AsMemory arr (PN a c) (PN b c) prog) =>
+    AsMemory (ArrowLoop' arr c) a b prog where
+        toProgram (Loop' f) inref = do
+            (comp, prox') <- toProgram f (pairProx inref (Proxy :: Proxy c))
             let (out, _) = splitProx prox'
             Prelude.return (comp, out)
 
