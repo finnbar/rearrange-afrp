@@ -9,32 +9,32 @@ import GenProc.ProcTH
 yampa :: SF Double Double
 yampa = proc _0 -> do
   rec
-    _3 <- FRP.Yampa.arr (+1) -< _1
-    _4 <- FRP.Yampa.arr (uncurry (+)) -< (_0, _2)
-    _5 <- FRP.Yampa.arr (uncurry (-)) -< (_2, _1)
-    _1 <- iPre 2.629114399142835 -< _0
-    _2 <- iPre 2.7760455248165155 -< _3
-  _6 <- FRP.Yampa.arr (uncurry (*)) -< (_4, _5)
-  _7 <- FRP.Yampa.arr (uncurry (*)) -< (_6, _6)
-  _8 <- iPre 1.703848420393424 -< _3
-  _9 <- FRP.Yampa.arr (uncurry (*)) -< (_0, _8)
-  _10 <- FRP.Yampa.arr (uncurry (-)) -< (_9, _7)
+    _2 <- FRP.Yampa.arr (+1) -< _1
+    _3 <- iPre 1.8244780908655402 -< _0
+    _4 <- FRP.Yampa.arr (uncurry (+)) -< (_3, _1)
+    _5 <- iPre 0.6210241335197109 -< _1
+    _1 <- iPre 1.1604595830320208 -< _3
+  _6 <- iPre 2.6233885900671643 -< _1
+  _7 <- FRP.Yampa.arr (uncurry (*)) -< (_3, _6)
+  _8 <- FRP.Yampa.arr (uncurry (*)) -< (_2, _7)
+  _9 <- FRP.Yampa.arr (uncurry (+)) -< (_8, _4)
+  _10 <- FRP.Yampa.arr (uncurry (+)) -< (_5, _9)
   FRP.Yampa.returnA -< _10
 
 afrp :: AFRP _ (V Double) (V Double)
 afrp = [gap|proc _0 -> do
   rec
-    _3 <- arr11 (+1) -< _1
-    _4 <- arr21 (+) -< {_0, _2}
-    _5 <- arr21 (-) -< {_2, _1}
-    _1 <- pre1 2.629114399142835 -< _0
-    _2 <- pre1 2.7760455248165155 -< _3
+    _2 <- arr11 (+1) -< _1
+    _3 <- pre1 1.8244780908655402 -< _0
+    _4 <- arr21 (+) -< {_3, _1}
+    _5 <- pre1 0.6210241335197109 -< _1
+    _1 <- pre1 1.1604595830320208 -< _3
 
-  _6 <- arr21 (*) -< {_4, _5}
-  _7 <- arr21 (*) -< {_6, _6}
-  _8 <- pre1 1.703848420393424 -< _3
-  _9 <- arr21 (*) -< {_0, _8}
-  _10 <- arr21 (-) -< {_9, _7}
+  _6 <- pre1 2.6233885900671643 -< _1
+  _7 <- arr21 (*) -< {_3, _6}
+  _8 <- arr21 (*) -< {_2, _7}
+  _9 <- arr21 (+) -< {_8, _4}
+  _10 <- arr21 (+) -< {_5, _9}
   GenProc.GeneralisedArrow.returnA -< _10|]
 
 codeLen :: Int

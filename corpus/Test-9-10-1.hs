@@ -9,33 +9,33 @@ import GenProc.ProcTH
 yampa :: SF Double Double
 yampa = proc _0 -> do
   rec
-    _4 <- iPre 2.6831931381968506 -< _1
-    _5 <- FRP.Yampa.arr (uncurry (-)) -< (_4, _3)
-    _6 <- FRP.Yampa.arr (+1) -< _5
-    _7 <- FRP.Yampa.arr (uncurry (+)) -< (_2, _0)
-    _8 <- iPre 1.9693178399728377 -< _2
-    _9 <- FRP.Yampa.arr (+1) -< _4
-    _10 <- FRP.Yampa.arr (+1) -< _7
-    _1 <- iPre 2.0515782466225105 -< _9
-    _2 <- iPre 1.3372118718966353 -< _8
-    _3 <- iPre 0.5035711576790273 -< _10
-  FRP.Yampa.returnA -< _6
+    _2 <- FRP.Yampa.arr (uncurry (-)) -< (_0, _1)
+    _3 <- FRP.Yampa.arr (+1) -< _2
+    _4 <- FRP.Yampa.arr (+1) -< _2
+    _5 <- FRP.Yampa.arr (uncurry (*)) -< (_1, _3)
+    _6 <- iPre 1.3528451967483643 -< _2
+    _7 <- FRP.Yampa.arr (+1) -< _6
+    _8 <- FRP.Yampa.arr (uncurry (*)) -< (_7, _7)
+    _9 <- FRP.Yampa.arr (uncurry (-)) -< (_4, _8)
+    _10 <- FRP.Yampa.arr (+1) -< _9
+    _1 <- iPre 0.5521932772613077 -< _10
+  FRP.Yampa.returnA -< _5
 
 afrp :: AFRP _ (V Double) (V Double)
 afrp = [gap|proc _0 -> do
   rec
-    _4 <- pre1 2.6831931381968506 -< _1
-    _5 <- arr21 (-) -< {_4, _3}
-    _6 <- arr11 (+1) -< _5
-    _7 <- arr21 (+) -< {_2, _0}
-    _8 <- pre1 1.9693178399728377 -< _2
-    _9 <- arr11 (+1) -< _4
-    _10 <- arr11 (+1) -< _7
-    _1 <- pre1 2.0515782466225105 -< _9
-    _2 <- pre1 1.3372118718966353 -< _8
-    _3 <- pre1 0.5035711576790273 -< _10
+    _2 <- arr21 (-) -< {_0, _1}
+    _3 <- arr11 (+1) -< _2
+    _4 <- arr11 (+1) -< _2
+    _5 <- arr21 (*) -< {_1, _3}
+    _6 <- pre1 1.3528451967483643 -< _2
+    _7 <- arr11 (+1) -< _6
+    _8 <- arr21 (*) -< {_7, _7}
+    _9 <- arr21 (-) -< {_4, _8}
+    _10 <- arr11 (+1) -< _9
+    _1 <- pre1 0.5521932772613077 -< _10
 
-  GenProc.GeneralisedArrow.returnA -< _6|]
+  GenProc.GeneralisedArrow.returnA -< _5|]
 
 codeLen :: Int
 codeLen = 10
