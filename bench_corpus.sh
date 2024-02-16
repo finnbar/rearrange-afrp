@@ -1,7 +1,7 @@
 #!/bin/bash
 
 touch test-results.csv
-for t in corpus/*
+for t in corpus/Test-$i-*
 do
     cp $t generated/Test0.hs
     # Benchmark!
