@@ -143,9 +143,9 @@ instance (ToMIO arr (PN a c) (PN b c) prog) =>
 -- This means that if have the output cell of a pre as the output of the entire program, reading it will give
 -- us the _next_ value being returned, not the current one.
 -- We fix this by adding one separate output cell by postcomposing >>> arr id to the input.
-type Augment :: [*] -> DescAnn a -> FreshState -> [*] -> DescAnn a -> FreshState -> Constraint
+type Augment :: [*] -> DescAnn a -> FreshKind -> [*] -> DescAnn a -> FreshKind -> Constraint
 class Augment prog a bs prog' a' bs' | prog a bs -> prog' a' bs' where
-    augment :: HList prog -> Proxy a -> BuildState bs -> IO (HList prog', Proxy a', BuildState bs')
+    augment :: HList prog -> Proxy a -> FreshState bs -> IO (HList prog', Proxy a', FreshState bs')
 
 instance forall a a' fs fs' read write prog prog'.
     (Fresh (AsDesc a) fs a' fs',

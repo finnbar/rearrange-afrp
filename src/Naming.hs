@@ -1,7 +1,7 @@
 {-# LANGUAGE FunctionalDependencies, UndecidableInstances, ScopedTypeVariables #-}
 
-module Naming (AssignMemory(..), newBuildState, EmptyFreshState, Fresh(..),
-    BuildState(..), EnvFromBuildState, FreshState) where
+module Naming (AssignMemory(..), newFreshState, EmptyFreshKind, Fresh(..),
+    FreshState(..), EnvFromFreshState, FreshKind) where
 
 -- AssignMemory transforms an SF into an SFAnn.
 
@@ -17,34 +17,34 @@ import AFRP
 
 -- Have the ability to make Fresh names to fill in the gaps in some DescAnn.
 
-type FreshState = (Nat, [*])
-type BuildState :: FreshState -> *
-type family EnvFromBuildState (x :: FreshState) where
-    EnvFromBuildState '(n, env) = env
-newtype BuildState (fs :: FreshState) = MkBuildState (HList (EnvFromBuildState fs))
+type FreshKind = (Nat, [*])
+type FreshState :: FreshKind -> *
+type family EnvFromFreshState (x :: FreshKind) where
+    EnvFromFreshState '(n, env) = env
+newtype FreshState (fs :: FreshKind) = MkFreshState (HList (EnvFromFreshState fs))
 
-type Fresh :: forall s. Desc s -> FreshState -> DescAnn s -> FreshState -> Constraint
-class Fresh d fs d' fs' | d fs -> d' fs' where
+type Fresh :: forall s. Desc s -> FreshKind -> DescAnn s -> FreshKind -> Constraint
+class Fresh d fk0 d' fk1 | d fk0 -> d' fk1 where
     -- Create a fresh undefined variable.
-    fresh :: BuildState fs -> Proxy d
-        -> IO (Proxy d', BuildState fs')
+    fresh :: FreshState fk0 -> Proxy d
+        -> IO (Proxy d', FreshState fk1)
     -- Create a fresh variable with the given value.
-    freshInit :: BuildState fs -> Val d
-        -> IO (Proxy d', BuildState fs')
+    freshInit :: FreshState fk0 -> Val d
+        -> IO (Proxy d', FreshState fk1)
 
 instance (n' ~ n + 1) =>
     Fresh (V a) '(n, env) (VN n a) '(n', Rearrange.IOCell n a ': env) where
-    fresh (MkBuildState ps) Proxy = do
+    fresh (MkFreshState ps) Proxy = do
         ref <- newIORef undefined
         let cell = Rearrange.Cell @_ @_ @IO ref
-        Prelude.return (Proxy, MkBuildState $ cell :+: ps)
-    freshInit (MkBuildState ps) (One v) = do
+        Prelude.return (Proxy, MkFreshState $ cell :+: ps)
+    freshInit (MkFreshState ps) (One v) = do
         ref <- newIORef v
         let cell = Rearrange.Cell @_ @_ @IO ref
-        Prelude.return (Proxy, MkBuildState $ cell :+: ps)
+        Prelude.return (Proxy, MkFreshState $ cell :+: ps)
 
-instance (Fresh l fs lns fs', Fresh r fs' rns fs'') =>
-    Fresh (P l r) fs (PN lns rns) fs'' where
+instance (Fresh l fk0 lns fk1, Fresh r fk1 rns fk2) =>
+    Fresh (P l r) fk0 (PN lns rns) fk2 where
     fresh bs prox = do
         let (lp, rp) = splitProx prox
         (lp', bs') <- fresh bs lp
@@ -55,61 +55,69 @@ instance (Fresh l fs lns fs', Fresh r fs' rns fs'') =>
         (rp, bs'') <- freshInit bs' r
         Prelude.return (pairProx lp rp, bs'')
 
-type EmptyFreshState = '(0, '[])
-newBuildState :: BuildState EmptyFreshState
-newBuildState = MkBuildState HNil
+type EmptyFreshKind = '(0, '[])
+newFreshState :: FreshState EmptyFreshKind
+newFreshState = MkFreshState HNil
 
 -- The challenge with naming is that loops create cycles.
 -- We therefore assignMemory as normal with various names, and then unify those that should
 -- be the same with Substitute.
-type AssignMemory :: Con ar ar' -> Desc ar -> Desc ar'
-    -> ConAnn ar ar' -> DescAnn ar -> DescAnn ar'
-    -> FreshState -> FreshState -> Constraint
-class AssignMemory arr a b arr' a' b' fs fs' | arr a b a' fs -> arr' b' fs' where
-    assignMemory :: SF arr a b -> Proxy a' -> BuildState fs ->
-        IO (SFAnn arr' a' b', Proxy b', BuildState fs')
+type AssignMemory :: Con sk sk' -> Desc sk -> Desc sk'
+    -> ConAnn sk sk' -> DescAnn sk -> DescAnn sk'
+    -> FreshKind -> FreshKind -> Constraint
+class AssignMemory con inp out conAnn inpAnn outAnn fk0 fk1
+    | con inp out inpAnn fk0 -> conAnn outAnn fk1 where
+    assignMemory :: SF con inp out -> Proxy inpAnn -> FreshState fk0 ->
+        IO (SFAnn conAnn inpAnn outAnn, Proxy outAnn, FreshState fk1)
 
-instance AssignMemory IdCon a a IdCon' a' a' fs fs where
+instance AssignMemory IdCon inp inp IdCon' inpAnn inpAnn fk0 fk0 where
     assignMemory Id prox bs = return (Id', prox, bs)
 
-instance AssignMemory DropLCon (P a b) b DropLCon' (PN a' b') b' fs fs where
+instance AssignMemory DropLCon (P inpL inpR) inpR
+    DropLCon' (PN inpLAnn inpRAnn) inpRAnn fk0 fk0 where
+    
     assignMemory DropL prox bs = let (_, r) = splitProx prox in return (DropL', r, bs)
 
-instance AssignMemory DropRCon (P a b) a DropRCon' (PN a' b') a' fs fs where
+instance AssignMemory DropRCon (P inpL inpR) inpL
+    DropRCon' (PN inpLAnn inpRAnn) inpLAnn fk0 fk0 where
+    
     assignMemory DropR prox bs = let (l, _) = splitProx prox in return (DropR', l, bs)
 
-instance AssignMemory DupCon a (P a a) DupCon' a' (PN a' a') fs fs where
+instance AssignMemory DupCon inp (P inp inp) DupCon' inpAnn (PN inpAnn inpAnn) fk0 fk0 where
     assignMemory Dup prox bs = return (Dup', pairProx prox prox, bs)
 
-instance (Fresh a fs a' fs', x ~ AsDesc x', a ~ AsDesc a') =>
-    AssignMemory ConstCon x a (ConstCon' a') x' a' fs fs' where
+instance (Fresh out fk0 outAnn fk1, inp ~ AsDesc inpAnn, out ~ AsDesc outAnn) =>
+    AssignMemory ConstCon inp out (ConstCon' outAnn) inpAnn outAnn fk0 fk1 where
     assignMemory (Constant x) _ bs = do
         (prox', bs') <- freshInit bs x
         return (Constant' x, prox', bs')
 
-instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
-    AssignMemory ArrCon a b ArrCon' a' b' fs fs' where
+instance (Fresh out fk0 outAnn fk1, inp ~ AsDesc inpAnn, out ~ AsDesc outAnn) =>
+    AssignMemory ArrCon inp out ArrCon' inpAnn outAnn fk0 fk1 where
     assignMemory (Arr f) _ bs = do
-        (prox', bs') <- fresh bs (Proxy :: Proxy b)
+        (prox', bs') <- fresh bs (Proxy :: Proxy out)
         return (Arr' f, prox', bs')
 
-instance (Fresh a fs b' fs', a ~ AsDesc a', a ~ AsDesc b') =>
-    AssignMemory PreCon a a PreCon' a' b' fs fs' where
+instance (Fresh inp fk0 outAnn fk1, inp ~ AsDesc inpAnn, inp ~ AsDesc outAnn) =>
+    AssignMemory PreCon inp inp PreCon' inpAnn outAnn fk0 fk1 where
     assignMemory (Pre v) _ bs = do
         (prox', bs') <- freshInit bs v
         return (Pre' v, prox', bs')
 
-instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' b' c' fs' fs'') =>
-    AssignMemory (GGGCon arrl arrr b) a c (GGGCon' arrl' arrr' b') a' c' fs fs'' where
+instance (AssignMemory con1 inp mid conAnn1 inpAnn midAnn fk0 fk1,
+    AssignMemory con2 mid out conAnn2 midAnn outAnn fk1 fk2) =>
+    AssignMemory (GGGCon con1 con2 mid) inp out
+        (GGGCon' conAnn1 conAnn2 midAnn) inpAnn outAnn fk0 fk2 where
+    
     assignMemory (f :>>>: g) prox bs = do
         (f', prox', bs') <- assignMemory f prox bs
         (g', prox'', bs'') <- assignMemory g prox' bs'
         return (f' :>>>:: g', prox'', bs'')
 
-instance (AssignMemory arrl a c arrl' a' c' fs fs',
-    AssignMemory arrr b d arrr' b' d' fs' fs'') =>
-    AssignMemory (SSSCon arrl arrr) (P a b) (P c d)
-    (SSSCon' arrl' arrr') (PN a' b') (PN c' d') fs fs'' where
+instance (AssignMemory con1 inpL outL conAnn1 inpLAnn outLAnn fk0 fk1,
+    AssignMemory con2 inpR outR conAnn2 inpRAnn outRAnn fk1 fk2) =>
+    AssignMemory (SSSCon con1 con2) (P inpL inpR) (P outL outR)
+    (SSSCon' conAnn1 conAnn2) (PN inpLAnn inpRAnn) (PN outLAnn outRAnn) fk0 fk2 where
     assignMemory (f :***: g) prox bs = do
         let (lp, rp) = splitProx prox
         (f', lp', bs') <- assignMemory f lp bs
@@ -118,34 +126,41 @@ instance (AssignMemory arrl a c arrl' a' c' fs fs',
 
 -- For loops:
 -- Make Fresh variables for the second input, use them to get the second output and then unify.
-instance (Fresh c fs c' fs',
+instance (Fresh looped fk0 loopedAnn fk1,
     -- AssignMemory the body once with the updated input DescAnn
-    AssignMemory arr (P a c) (P b c) arr' (PN a' c') (PN b' d') fs' fs'',
+    AssignMemory con (P inp looped) (P out looped)
+        conAnn (PN inpAnn loopedAnn) (PN outAnn newLoopedAnn) fk1 fk2,
     -- Then repeatedly substitute until the looped desc is constant.
-    RepeatSub arr' a' b' c' d' arr'' b'' c'' (c' == d')) =>
-    AssignMemory (LoopCon arr c) a b (LoopCon' arr'' c'') a' b'' fs fs'' where
+    RepeatSub conAnn inpAnn outAnn loopedAnn newLoopedAnn
+        conFinal outFinal loopedFinal (loopedAnn == newLoopedAnn)) =>
+    AssignMemory (LoopCon con looped) inp out (LoopCon' conFinal loopedFinal) inpAnn outFinal fk0 fk2 where
     assignMemory (Loop f) prox bs = do
-        (proxc, bs') <- fresh bs (Proxy :: Proxy c)
+        (proxc, bs') <- fresh bs (Proxy :: Proxy looped)
         (f', Proxy, bs'') <- assignMemory f (pairProx prox proxc) bs'
-        let f'' = repeatSub (Proxy :: Proxy (c' == d')) f'
-        return (Loop' f'', Proxy :: Proxy b'', bs'')
+        let f'' = repeatSub (Proxy :: Proxy (loopedAnn == newLoopedAnn)) f'
+        return (Loop' f'', Proxy :: Proxy outFinal, bs'')
 
-class RepeatSub arr a b c d arr' b' c' eq | arr a b c d eq -> arr' b' c' where
-    repeatSub :: Proxy eq -> SFAnn arr (PN a c) (PN b d) -> SFAnn arr' (PN a c') (PN b' c')
+class RepeatSub conAnn inpAnn outAnn loopedAnn newLoopedAnn
+    conFinal outFinal loopedFinal eq
+    | conAnn inpAnn outAnn loopedAnn newLoopedAnn eq -> conFinal outFinal loopedFinal where
+    repeatSub :: Proxy eq -> SFAnn conAnn (PN inpAnn loopedAnn) (PN outAnn newLoopedAnn)
+        -> SFAnn conFinal (PN inpAnn loopedFinal) (PN outFinal loopedFinal)
 
 -- If we already have something of the right form, we are done.
-instance RepeatSub arr a b c c arr b c 'True where
+instance RepeatSub con inp out looped looped con out looped 'True where
     repeatSub _ afrp = afrp
 
 -- If not, we must go again.
-instance (sub ~ ToSubstitution c d,
-    Substitute arr (PN a c) (PN b d) arr' (PN a c') (PN b' d') sub,
+instance (sub ~ ToSubstitution looped newLooped,
+    Substitute con (PN inp looped) (PN out newLooped)
+        conSub (PN inp loopedSub) (PN outSub newLoopedSub) sub,
     -- Then recursively call:
-    RepeatSub arr' a b' c' d' arr'' b'' c'' (c' == d')) =>
-    RepeatSub arr a b c d arr'' b'' c'' 'False where
+    RepeatSub conSub inp outSub loopedSub newLoopedSub
+        conFinal outFinal loopedFinal (loopedSub == newLoopedSub)) =>
+    RepeatSub con inp out looped newLooped conFinal outFinal loopedFinal 'False where
     
     repeatSub Proxy afrp =
-        repeatSub (Proxy :: Proxy (c' == d')) (substitute afrp (Proxy :: Proxy sub))
+        repeatSub (Proxy :: Proxy (loopedSub == newLoopedSub)) (substitute afrp (Proxy :: Proxy sub))
 
 -- Within x, substitutes all Nat in s' with their equivalent in s.
 -- Important note: we always substitute output name in place of input name.
@@ -196,14 +211,14 @@ instance (b ~ Subst a sub, b' ~ Subst a' sub, AsDesc a ~ AsDesc b, AsDesc a' ~ A
     Substitute PreCon' a a' PreCon' b b' sub where
     substitute (Pre' v) _ = Pre' v
 
-instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr b c arrr' b' c' sub) =>
-    Substitute (GGGCon' arrl arrr b) a c (GGGCon' arrl' arrr' b') a' c' sub where
+instance (Substitute con1 a b con1' a' b' sub, Substitute con2 b c con2' b' c' sub) =>
+    Substitute (GGGCon' con1 con2 b) a c (GGGCon' con1' con2' b') a' c' sub where
     substitute (f :>>>:: g) sub = substitute f sub :>>>:: substitute g sub
 
-instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr c d arrr' c' d' sub) =>
-    Substitute (SSSCon' arrl arrr) (PN a c) (PN b d) (SSSCon' arrl' arrr') (PN a' c') (PN b' d') sub where
+instance (Substitute con1 a b con1' a' b' sub, Substitute con2 c d con2' c' d' sub) =>
+    Substitute (SSSCon' con1 con2) (PN a c) (PN b d) (SSSCon' con1' con2') (PN a' c') (PN b' d') sub where
     substitute (f :***:: g) sub = substitute f sub :***:: substitute g sub
 
-instance (Substitute arr (PN a c) (PN b c) arr' (PN a' c') (PN b' c') sub) =>
-    Substitute (LoopCon' arr c) a b (LoopCon' arr' c') a' b' sub where
+instance (Substitute con (PN a c) (PN b c) con' (PN a' c') (PN b' c') sub) =>
+    Substitute (LoopCon' con c) a b (LoopCon' con' c') a' b' sub where
     substitute (Loop' f) sub = Loop' (substitute f sub)
