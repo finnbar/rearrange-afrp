@@ -28,13 +28,10 @@ library
       AFRP
       Control.Effect
       Data.Memory.Dependencies
-      Data.Memory.EnvUtil
       Data.Memory.Memory
       Data.Memory.MemoryCell
       Data.Memory.Program
       Data.Memory.RunMemory
-      Data.Memory.RunMemoryConc
-      Data.Memory.ToCells
       Data.Memory.Types
       Data.Type.AdjacencyList
       Data.Type.ComponentSearch
@@ -51,7 +48,6 @@ library
       GenProc.TransformProc
       GraphRearrange
       MakeMIO
-      MonadRW
       Naming
       RAFRP
       Rearrange

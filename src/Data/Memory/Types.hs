@@ -5,13 +5,11 @@
     UndecidableInstances, AllowAmbiguousTypes #-}
 
 module Data.Memory.Types (
-    Memory(..), Cell(..), CellUpdate(..), IsMemory,
+    MemAft(..), Cell(..), IsMemory,
     Split(..), Set(..), Sort, MemoryUnion, MemoryPlus, MemoryWrites,
-    MemoryReads, MemoryPostWrites, MIO, IOCell, TrioUnion, MemState,
-    Subset(..), NoConflicts, NoConflicts_, AutoCell(..), GetName,
+    MemoryReads, MemoryPostWrites, TrioUnion, MemState,
+    Subset(..), NoConflicts, NoConflicts_, GetName,
 ) where
-
-import MonadRW (MonadRW(..))
 
 import Data.Type.Set
 import GHC.TypeLits (Nat, CmpNat, TypeError, ErrorMessage(..))
@@ -22,40 +20,29 @@ type MemState = ([*], [*], [*])
 
 -- NOTE: This version of memory now has three sections: writes, reads and postwrites.
 -- They execute in that order.
-newtype Memory (m :: * -> *) (s :: MemState) a =
-    Mem { runMemory :: Set (MemoryUnion s) -> m a }
+newtype MemAft (s :: MemState) a =
+    Mem { runMemory :: Set (MemoryUnion s) -> IO a }
 
-instance Functor m => Functor (Memory m s) where
+instance Functor (MemAft s) where
     fmap f (Mem rm) = Mem $ \s -> f <$> rm s
 
 type family MemoryPostWrites x :: [*] where
-    MemoryPostWrites (Memory m '(ws, rs, ps) a) = ps
+    MemoryPostWrites (MemAft '(ws, rs, ps) a) = ps
 
 type family MemoryWrites x :: [*] where
-    MemoryWrites (Memory m '(ws, rs, ps) a) = ws
+    MemoryWrites (MemAft '(ws, rs, ps) a) = ws
 
 type family MemoryReads x :: [*] where
-    MemoryReads (Memory m '(ws, rs, ps) a) = rs
+    MemoryReads (MemAft '(ws, rs, ps) a) = rs
 
-data Cell (v :: * -> *) (s :: Nat) (t :: *) where
-    Cell :: forall s t m v. (Monad m, MonadRW m v, Constr m v t) => v t -> Cell v s t
+data Cell (s :: Nat) (t :: *) where
+    Cell :: forall s t. IORef t -> Cell s t
 
-data AutoCell (s :: Nat) (t :: *) where
-    AutoCell :: forall s t. IORef t -> AutoCell s t
-
-newtype CellUpdate = AddrUpdate String
-
-type MIO s a = Memory IO s a
-type IOCell s t = Cell IORef s t
-
-type instance Cmp (Cell v s t) (Cell v' s' t') = CmpNat s s'
-type instance Cmp (AutoCell s t) (AutoCell s' t') = CmpNat s s'
-type instance Cmp (Cell v s t) (AutoCell s' t') = CmpNat s s'
-type instance Cmp (AutoCell s t) (Cell v s' t') = CmpNat s s'
+type instance Cmp (Cell s t) (Cell s' t') = CmpNat s s'
 
 -- Specific definitions of Union and IsSet for lists of Cells.
 
--- Definitions of Union and IsSet for sets of Memory, which are just
+-- Definitions of Union and IsSet for sets of MemAft, which are just
 -- elementwise lists of Cells.
 
 type TrioUnion as bs cs = Union as (Union bs cs)
@@ -70,8 +57,7 @@ type family IsMemory (x :: MemState) :: Constraint where
     IsMemory '(s, t, u) = (IsSet s, IsSet t, IsSet u)
 
 type family GetName (x :: *) :: Nat where
-    GetName (Cell v s t) = s
-    GetName (AutoCell s t) = s
+    GetName (Cell s t) = s
     GetName x = TypeError (Text "Cannot get the name of " :<>: ShowType x
         :$$: Text "It must be a Cell or AutoCell!")
 

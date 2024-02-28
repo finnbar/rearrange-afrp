@@ -161,7 +161,7 @@ data DescAnn ar where
 
 type Ref :: forall s. DescAnn s -> *
 data Ref desc where
-    VRef :: IOCell n a -> Ref (VN n a)
+    VRef :: Cell n a -> Ref (VN n a)
     PRef :: Ref l -> Ref r -> Ref (PN l r)
 
 type AsDesc :: forall (ar :: SKind). DescAnn ar -> Desc ar

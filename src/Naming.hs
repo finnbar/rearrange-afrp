@@ -33,14 +33,14 @@ class Fresh d fk0 d' fk1 | d fk0 -> d' fk1 where
         -> IO (Proxy d', FreshState fk1)
 
 instance (n' ~ n + 1) =>
-    Fresh (V a) '(n, env) (VN n a) '(n', Rearrange.IOCell n a ': env) where
+    Fresh (V a) '(n, env) (VN n a) '(n', Rearrange.Cell n a ': env) where
     fresh (MkFreshState ps) Proxy = do
         ref <- newIORef undefined
-        let cell = Rearrange.Cell @_ @_ @IO ref
+        let cell = Rearrange.Cell ref
         Prelude.return (Proxy, MkFreshState $ cell :+: ps)
     freshInit (MkFreshState ps) (One v) = do
         ref <- newIORef v
-        let cell = Rearrange.Cell @_ @_ @IO ref
+        let cell = Rearrange.Cell ref
         Prelude.return (Proxy, MkFreshState $ cell :+: ps)
 
 instance (Fresh l fk0 lns fk1, Fresh r fk1 rns fk2) =>

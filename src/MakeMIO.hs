@@ -15,10 +15,10 @@ import Data.Proxy
 
 type ReadCells :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
 class ReadCells descAnn grade | descAnn -> grade where
-    readCells :: Proxy descAnn -> Memory IO grade (Val (AsDesc descAnn))
+    readCells :: Proxy descAnn -> MemAft grade (Val (AsDesc descAnn))
 
-instance ReadCells (VN n a) '( '[], '[IOCell n a], '[]) where
-    readCells _ = One <$> readIOCell
+instance ReadCells (VN n a) '( '[], '[Cell n a], '[]) where
+    readCells _ = One <$> readCell
 
 instance (ReadCells descL gradeL, ReadCells descR gradeR, res ~ MemoryPlus gradeL gradeR,
     MemoryInv gradeL gradeR) => ReadCells (PN descL descR) res where
@@ -29,10 +29,10 @@ instance (ReadCells descL gradeL, ReadCells descR gradeR, res ~ MemoryPlus grade
 
 type WriteCells :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
 class WriteCells descAnn grade | descAnn -> grade where
-    writeCells :: Proxy descAnn -> Val (AsDesc descAnn) -> Memory IO grade ()
+    writeCells :: Proxy descAnn -> Val (AsDesc descAnn) -> MemAft grade ()
 
-instance WriteCells (VN n a) '( '[IOCell n a], '[], '[]) where
-    writeCells _ (One v) = writeIOCell v
+instance WriteCells (VN n a) '( '[Cell n a], '[], '[]) where
+    writeCells _ (One v) = writeCell v
 
 instance (WriteCells descL gradeL, WriteCells descR gradeR, res ~ MemoryPlus gradeL gradeR,
     MemoryInv gradeL gradeR) => WriteCells (PN descL descR) res where
@@ -43,10 +43,10 @@ instance (WriteCells descL gradeL, WriteCells descR gradeR, res ~ MemoryPlus gra
 
 type WriteCellsAfter :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
 class WriteCellsAfter descAnn grade | descAnn -> grade where
-    writeCellsAfter :: Proxy descAnn -> Val (AsDesc descAnn) -> Memory IO grade ()
+    writeCellsAfter :: Proxy descAnn -> Val (AsDesc descAnn) -> MemAft grade ()
 
-instance WriteCellsAfter (VN n a) '( '[], '[], '[IOCell n a]) where
-    writeCellsAfter _ (One v) = writeIOCellAfter v
+instance WriteCellsAfter (VN n a) '( '[], '[], '[Cell n a]) where
+    writeCellsAfter _ (One v) = writeCellAfter v
 
 instance (WriteCellsAfter descL gradeL, WriteCellsAfter descR gradeR, res ~ MemoryPlus gradeL gradeR,
     MemoryInv gradeL gradeR) => WriteCellsAfter (PN descL descR) res where
@@ -58,7 +58,7 @@ instance (WriteCellsAfter descL gradeL, WriteCellsAfter descR gradeR, res ~ Memo
 class ProxToRef descAnn env where
     proxToRef :: Proxy descAnn -> HList env -> Ref descAnn
 
-instance (LookupNth n env (IOCell n a)) => ProxToRef (VN n a) env where
+instance (LookupNth n env (Cell n a)) => ProxToRef (VN n a) env where
     proxToRef Proxy env =
         let cell = lookupNth (Proxy :: Proxy n) env in VRef cell
 
@@ -98,7 +98,7 @@ instance ToMIO (ConstCon' a) x a '[] where
         Prelude.return (HNil, outprox)
 
 instance (ReadCells inpAnn read, WriteCells outAnn write,
-    MemoryInv read write, prog ~ '[MIO (MemoryPlus read write) ()]) =>
+    MemoryInv read write, prog ~ '[MemAft (MemoryPlus read write) ()]) =>
     ToMIO ArrCon' inpAnn outAnn prog where
         toMIO (Arr' f) inprox = do
             let outprox = Proxy :: Proxy outAnn
@@ -107,7 +107,7 @@ instance (ReadCells inpAnn read, WriteCells outAnn write,
 
 instance (ReadCells inpAnn read, WriteCellsAfter outAnn after, AsDesc outAnn ~ AsDesc inpAnn,
     MemoryInv read after, mems ~ MemoryPlus read after) =>
-    ToMIO PreCon' inpAnn outAnn '[Memory IO mems ()] where
+    ToMIO PreCon' inpAnn outAnn '[MemAft mems ()] where
         toMIO (Pre' v) inprox = do
             let outprox = Proxy :: Proxy outAnn
                 comp = readCells inprox Rearrange.>>= writeCellsAfter outprox
@@ -152,7 +152,7 @@ instance forall out out' fk0 fk1 read write prog prog'.
     ReadCells out read, WriteCells out' write,
     MemoryInv read write,
     AsDesc out ~ AsDesc out',
-    prog' ~ Append (MIO (MemoryPlus read write) ()) prog) =>
+    prog' ~ Append (MemAft (MemoryPlus read write) ()) prog) =>
     Augment prog out fk0 prog' out' fk1 where
         augment prog prox bs = do
             (prox', bs') <- fresh bs (Proxy :: Proxy (AsDesc out))

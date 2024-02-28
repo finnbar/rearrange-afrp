@@ -4,7 +4,7 @@
 {-# LANGUAGE UndecidableInstances, FlexibleContexts #-}
 
 module Data.Memory.Memory (
-    Memory(..), Cell(..), MemoryInv,
+    MemAft(..), Cell(..), MemoryInv,
     MemoryUnion, MemoryPlus,
     memoryIO, unsafeMemoryIO,
     ifThenElse
@@ -21,10 +21,10 @@ type MemoryInv f g = (IsMemory f, IsMemory g,
         NoConflicts f, NoConflicts g,
         Split (MemoryUnion f) (MemoryUnion g) (MemoryUnion (MemoryPlus f g)))
 
-instance P.Monad m => Effect (Memory m) where
-    type Inv (Memory m) f g = MemoryInv f g
-    type Unit (Memory m) = '( '[], '[], '[] )
-    type Plus (Memory m) f g = MemoryPlus f g
+instance Effect MemAft where
+    type Inv MemAft f g = MemoryInv f g
+    type Unit MemAft = '( '[], '[], '[] )
+    type Plus MemAft f g = MemoryPlus f g
 
     return x = Mem $ \Empty -> P.return x
     (Mem e) >>= k =
@@ -38,13 +38,13 @@ ifThenElse False _ a = a
 
 ifThenElseMem :: (Subset (TrioUnion ws rs ps) (TrioUnion ws'' rs'' ps''),
     Subset (TrioUnion ws' rs' ps') (TrioUnion ws'' rs'' ps'')) =>
-    Bool -> Memory m '(ws, rs, ps) a -> Memory m '(ws', rs', ps') a
-    -> Memory m '(ws'', rs'', ps'') a
+    Bool -> MemAft '(ws, rs, ps) a -> MemAft '(ws', rs', ps') a
+    -> MemAft '(ws'', rs'', ps'') a
 ifThenElseMem True  a _ = Mem $ \set -> runMemory a (subset set)
 ifThenElseMem False _ b = Mem $ \set -> runMemory b (subset set)
 
-memoryIO :: IO a -> Memory IO '( '[], '[], '[]) a
+memoryIO :: IO a -> MemAft '( '[], '[], '[]) a
 memoryIO act = Mem $ \Empty -> act
 
-unsafeMemoryIO :: P.Monad m => IO a -> Memory m '( '[], '[], '[]) a
+unsafeMemoryIO :: IO a -> MemAft '( '[], '[], '[]) a
 unsafeMemoryIO act = Mem $ \Empty -> P.return $ unsafePerformIO act
