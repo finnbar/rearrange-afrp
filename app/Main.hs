@@ -1,5 +1,7 @@
 module Main (main) where
 
+-- Main runs the proc code generator with the given parameters.
+
 import System.Environment (getArgs)
 import ToAFRPCode (generateFile)
 

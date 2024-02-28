@@ -75,31 +75,31 @@ instance (ProxToRef l env, ProxToRef r env) => ProxToRef (PN l r) env where
 -- then a user will have to type `arr f bs rf` with the correct fs' and prog.
 -- There might be a world where a user can say that the type is (Arr <a bunch of arguments>) but that seems worse than the current one.
 
-type ToMIO :: forall (ar :: SKind) (br :: SKind).
-    AFRPConAnn ar br -> DescAnn ar -> DescAnn br -> [*] -> Constraint
+type ToMIO :: forall (sk :: SKind) (sk' :: SKind).
+    ConAnn sk sk' -> DescAnn sk -> DescAnn sk' -> [*] -> Constraint
 class ToMIO arr a b prog | arr a b -> prog where
-    toMIO :: AFRPAnn arr a b -> Proxy a -> IO (HList prog, Proxy b)
+    toMIO :: SFAnn arr a b -> Proxy a -> IO (HList prog, Proxy b)
 
-instance ToMIO ArrowId' a a '[] where
+instance ToMIO IdCon' a a '[] where
     toMIO Id' prox = Prelude.return (HNil, prox)
 
-instance ToMIO ArrowDropL' (PN a b) b '[] where
+instance ToMIO DropLCon' (PN a b) b '[] where
     toMIO DropL' prox = let (_, br) = splitProx prox in Prelude.return (HNil, br)
 
-instance ToMIO ArrowDropR' (PN a b) a '[] where
+instance ToMIO DropRCon' (PN a b) a '[] where
     toMIO DropR' prox = let (ar, _) = splitProx prox in Prelude.return (HNil, ar)
 
-instance ToMIO ArrowDup' a (PN a a) '[] where
+instance ToMIO DupCon' a (PN a a) '[] where
     toMIO Dup' prox = Prelude.return (HNil, pairProx prox prox)
 
-instance ToMIO (ArrowConst' a) x a '[] where
+instance ToMIO (ConstCon' a) x a '[] where
     toMIO (Constant' c) _ = do
         let outprox = Proxy :: Proxy a
         Prelude.return (HNil, outprox)
 
 instance (ReadCells a ar, WriteCells b br,
     MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
-    ToMIO ArrowArr' a b prog where
+    ToMIO ArrCon' a b prog where
         toMIO (Arr' f) inprox = do
             let outprox = Proxy :: Proxy b
                 comp = (f <$> readCells inprox) Rearrange.>>= writeCells outprox
@@ -107,7 +107,7 @@ instance (ReadCells a ar, WriteCells b br,
 
 instance (ReadCells a ar, WriteCellsAfter a' ar', AsDesc a' ~ AsDesc a,
     MemoryInv ar ar', mems ~ MemoryPlus ar ar') =>
-    ToMIO ArrowPre' a a' '[Memory IO mems ()] where
+    ToMIO PreCon' a a' '[Memory IO mems ()] where
         toMIO (Pre' v) inprox = do
             let outprox = Proxy :: Proxy a'
                 comp = readCells inprox Rearrange.>>= writeCellsAfter outprox
@@ -115,7 +115,7 @@ instance (ReadCells a ar, WriteCellsAfter a' ar', AsDesc a' ~ AsDesc a,
 
 instance (ToMIO larr a b progl, ToMIO rarr b c progr,
     prog ~ Combine progl progr) =>
-    ToMIO (ArrowGGG' larr rarr b) a c prog where
+    ToMIO (GGGCon' larr rarr b) a c prog where
         toMIO (f :>>>:: g) inprox = do
             (compf, midprox) <- toMIO f inprox
             (compg, outprox) <- toMIO g midprox
@@ -123,7 +123,7 @@ instance (ToMIO larr a b progl, ToMIO rarr b c progr,
 
 instance (ToMIO larr la lb progl, ToMIO rarr ra rb progr,
     prog ~ Combine progl progr) =>
-    ToMIO (ArrowSSS' larr rarr) (PN la ra) (PN lb rb) prog where
+    ToMIO (SSSCon' larr rarr) (PN la ra) (PN lb rb) prog where
         toMIO (f :***:: g) prox = do
             let (inl, inr) = splitProx prox
             (compf, outl) <- toMIO f inl
@@ -131,7 +131,7 @@ instance (ToMIO larr la lb progl, ToMIO rarr ra rb progr,
             Prelude.return (hCombine compf compg, pairProx outl outr)
 
 instance (ToMIO arr (PN a c) (PN b c) prog) =>
-    ToMIO (ArrowLoop' arr c) a b prog where
+    ToMIO (LoopCon' arr c) a b prog where
         toMIO (Loop' f) inref = do
             (comp, prox') <- toMIO f (pairProx inref (Proxy :: Proxy c))
             let (out, _) = splitProx prox'

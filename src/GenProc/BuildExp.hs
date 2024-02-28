@@ -35,4 +35,4 @@ idExp :: Exp ()
 idExp = Var () $ qualified $ Ident () "id"
 
 qualified :: Name () -> QName ()
-qualified = Qual () (ModuleName () "GenProc.GeneralisedArrow")
+qualified = Qual () (ModuleName () "AFRP")

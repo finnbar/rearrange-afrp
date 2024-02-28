@@ -1,5 +1,8 @@
 module ToAFRPCode where
 
+-- This runs generateProcCode to create a GenProc using the given parameters, and then generates actual code from that GenProc.
+-- This is all written to generated/Test0.hs.
+
 import GenerateProcCode
 
 import qualified Text.RawString.QQ as Q (r)
@@ -12,8 +15,8 @@ generateFile codeLen codeRecLen modNam = do
     let yampaCode = toYampa procCode
         afrpCode = toAFRP procCode
         moduleName = "{-# LANGUAGE Arrows #-}\nmodule " ++ modNam ++ " where\n\n"
-        yampaDef = "yampa :: SF Double Double\nyampa = " ++ yampaCode ++ "\n\n"
-        afrpDef = "afrp :: AFRP _ (V Double) (V Double)\nafrp = " ++ afrpCode ++ "\n\n"
+        yampaDef = "yampa :: FRP.Yampa.SF Double Double\nyampa = " ++ yampaCode ++ "\n\n"
+        afrpDef = "afrp :: AFRP.SF _ (V Double) (V Double)\nafrp = " ++ afrpCode ++ "\n\n"
         bonusConsts = "codeLen :: Int\ncodeLen = " ++ show codeLen ++ "\ncodeRecLen :: Int\ncodeRecLen = " ++ show codeRecLen
     writeFile ("generated/" ++ modNam ++ ".hs") $ moduleName ++ header ++ yampaDef ++ afrpDef ++ bonusConsts
 
@@ -45,7 +48,7 @@ linesToYampa (l : ls) indent = case l of
         printIt inp fname output = indent ++ output ++ " <- " ++ fname ++ " -< " ++ inp ++ "\n"
 
 toAFRP :: ProcCode -> String
-toAFRP (PC lines output) = "[gap|proc _0 -> do\n" ++ linesToAFRP lines "  " ++ "  GenProc.GeneralisedArrow.returnA -< " ++ singleVarPrintout output ++ "|]"
+toAFRP (PC lines output) = "[gap|proc _0 -> do\n" ++ linesToAFRP lines "  " ++ "  AFRP.returnA -< " ++ singleVarPrintout output ++ "|]"
 
 linesToAFRP :: [Line] -> String -> String
 linesToAFRP [] _ = ""
@@ -64,7 +67,7 @@ linesToAFRP (l : ls) indent = case l of
 header :: String
 header = [Q.r|import FRP.Yampa
 import RAFRP
-import GenProc.GeneralisedArrow
+import AFRP
 import GenProc.ProcTH
 
 |]

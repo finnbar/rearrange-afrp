@@ -1,17 +1,18 @@
 {-# LANGUAGE UndecidableInstances, QualifiedDo, ScopedTypeVariables, Strict #-}
 
-module RAFRP (module AFRP, module GenProc.GeneralisedArrow, makeAFRP, toRearrangeable) where
+module RAFRP (module AFRP, makeAFRP, toRearrangeable) where
 
 import AFRP
 import MakeMIO
 import Naming
 import Rearrange
-import GenProc.GeneralisedArrow
+import AFRP
 import Data.Type.HList
 
 import Data.Type.Set hiding (Proxy(..))
 import Data.Proxy
 
+-- TODO rename all arr to con, global type var renaming
 makeAFRP :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' env'' prog' prog''.
     (Fresh a EmptyFreshState a' fs,
     AssignMemory arr a b arr' a' b' fs fs',
@@ -24,7 +25,7 @@ makeAFRP :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' env'' prog' 
     AsDesc a' ~ a, AsDesc b'' ~ b,
     env'' ~ AsSet env',
     MakeProgConstraints prog' prog'' env'', CompileMems_ prog'' env'') =>
-    AFRP arr a b -> IO (Val a -> IO (Val b))
+    SF arr a b -> IO (Val a -> IO (Val b))
 makeAFRP afrp = do
     (inprox, bs) <- fresh @_ @a newBuildState (Proxy :: Proxy a)
     (afrp', _, bs') <- assignMemory afrp inprox bs
@@ -50,7 +51,7 @@ toRearrangeable :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' prog'
     HReverse env env',
     AsDesc a' ~ a, AsDesc b'' ~ b,
     ProxToRef a' env', ProxToRef b'' env') =>
-    AFRP arr a b -> IO (HList prog', HList env', Ref a', Ref b'')
+    SF arr a b -> IO (HList prog', HList env', Ref a', Ref b'')
 toRearrangeable afrp = do
     (inprox, bs) <- fresh @_ @a newBuildState (Proxy :: Proxy a)
     (afrp', _, bs') <- assignMemory afrp inprox bs

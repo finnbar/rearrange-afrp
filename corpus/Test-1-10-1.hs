@@ -3,10 +3,10 @@ module Test0 where
 
 import FRP.Yampa
 import RAFRP
-import GenProc.GeneralisedArrow
+import AFRP
 import GenProc.ProcTH
 
-yampa :: SF Double Double
+yampa :: FRP.Yampa.SF Double Double
 yampa = proc _0 -> do
   rec
     _2 <- FRP.Yampa.arr (uncurry (-)) -< (_0, _0)
@@ -21,7 +21,7 @@ yampa = proc _0 -> do
     _1 <- iPre 6.28688579603024e-2 -< _10
   FRP.Yampa.returnA -< _8
 
-afrp :: AFRP _ (V Double) (V Double)
+afrp :: AFRP.SF _ (V Double) (V Double)
 afrp = [gap|proc _0 -> do
   rec
     _2 <- arr21 (-) -< {_0, _0}
@@ -35,7 +35,7 @@ afrp = [gap|proc _0 -> do
     _10 <- pre1 2.4396618534236625 -< _9
     _1 <- pre1 6.28688579603024e-2 -< _10
 
-  GenProc.GeneralisedArrow.returnA -< _8|]
+  AFRP.returnA -< _8|]
 
 codeLen :: Int
 codeLen = 10

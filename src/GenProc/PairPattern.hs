@@ -33,7 +33,7 @@ parsePairs = do
 -- worrying about which case is which.
 toConstructors :: ParsedPair -> String
 toConstructors (OneParsed s) = s
-toConstructors (PairParsed l r) = "GenProc.GeneralisedArrow.Pair (" ++ toConstructors l ++ ") (" ++ toConstructors r ++ ")"
+toConstructors (PairParsed l r) = "AFRP.Pair (" ++ toConstructors l ++ ") (" ++ toConstructors r ++ ")"
 
 -- Parses {x, y}, where x and y are variables, a tuple, a list or {,} itself.
 pair :: Parser ParsedPair

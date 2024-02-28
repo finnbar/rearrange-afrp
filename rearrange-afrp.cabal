@@ -45,7 +45,6 @@ library
       Data.Type.Utils
       GenProc.BuildExp
       GenProc.Env
-      GenProc.GeneralisedArrow
       GenProc.Optimise
       GenProc.PairPattern
       GenProc.ProcTH

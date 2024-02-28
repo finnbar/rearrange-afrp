@@ -3,7 +3,7 @@
 module Naming (AssignMemory(..), newBuildState, EmptyFreshState, Fresh(..),
     BuildState(..), EnvFromBuildState, FreshState) where
 
--- AssignMemory transforms an AFRP into an AFRPAnn.
+-- AssignMemory transforms an SF into an SFAnn.
 
 import GHC.TypeLits
 import Data.Type.HList
@@ -62,45 +62,45 @@ newBuildState = MkBuildState HNil
 -- The challenge with naming is that loops create cycles.
 -- We therefore assignMemory as normal with various names, and then unify those that should
 -- be the same with Substitute.
-type AssignMemory :: Arrow ar ar' -> Desc ar -> Desc ar'
-    -> AFRPConAnn ar ar' -> DescAnn ar -> DescAnn ar'
+type AssignMemory :: Con ar ar' -> Desc ar -> Desc ar'
+    -> ConAnn ar ar' -> DescAnn ar -> DescAnn ar'
     -> FreshState -> FreshState -> Constraint
 class AssignMemory arr a b arr' a' b' fs fs' | arr a b a' fs -> arr' b' fs' where
-    assignMemory :: AFRP arr a b -> Proxy a' -> BuildState fs ->
-        IO (AFRPAnn arr' a' b', Proxy b', BuildState fs')
+    assignMemory :: SF arr a b -> Proxy a' -> BuildState fs ->
+        IO (SFAnn arr' a' b', Proxy b', BuildState fs')
 
-instance AssignMemory ArrowId a a ArrowId' a' a' fs fs where
+instance AssignMemory IdCon a a IdCon' a' a' fs fs where
     assignMemory Id prox bs = return (Id', prox, bs)
 
-instance AssignMemory ArrowDropL (P a b) b ArrowDropL' (PN a' b') b' fs fs where
+instance AssignMemory DropLCon (P a b) b DropLCon' (PN a' b') b' fs fs where
     assignMemory DropL prox bs = let (_, r) = splitProx prox in return (DropL', r, bs)
 
-instance AssignMemory ArrowDropR (P a b) a ArrowDropR' (PN a' b') a' fs fs where
+instance AssignMemory DropRCon (P a b) a DropRCon' (PN a' b') a' fs fs where
     assignMemory DropR prox bs = let (l, _) = splitProx prox in return (DropR', l, bs)
 
-instance AssignMemory ArrowDup a (P a a) ArrowDup' a' (PN a' a') fs fs where
+instance AssignMemory DupCon a (P a a) DupCon' a' (PN a' a') fs fs where
     assignMemory Dup prox bs = return (Dup', pairProx prox prox, bs)
 
 instance (Fresh a fs a' fs', x ~ AsDesc x', a ~ AsDesc a') =>
-    AssignMemory ArrowConst x a (ArrowConst' a') x' a' fs fs' where
+    AssignMemory ConstCon x a (ConstCon' a') x' a' fs fs' where
     assignMemory (Constant x) _ bs = do
         (prox', bs') <- freshInit bs x
         return (Constant' x, prox', bs')
 
 instance (Fresh b fs b' fs', a ~ AsDesc a', b ~ AsDesc b') =>
-    AssignMemory ArrowArr a b ArrowArr' a' b' fs fs' where
+    AssignMemory ArrCon a b ArrCon' a' b' fs fs' where
     assignMemory (Arr f) _ bs = do
         (prox', bs') <- fresh bs (Proxy :: Proxy b)
         return (Arr' f, prox', bs')
 
 instance (Fresh a fs b' fs', a ~ AsDesc a', a ~ AsDesc b') =>
-    AssignMemory ArrowPre a a ArrowPre' a' b' fs fs' where
+    AssignMemory PreCon a a PreCon' a' b' fs fs' where
     assignMemory (Pre v) _ bs = do
         (prox', bs') <- freshInit bs v
         return (Pre' v, prox', bs')
 
 instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' b' c' fs' fs'') =>
-    AssignMemory (ArrowGGG arrl arrr b) a c (ArrowGGG' arrl' arrr' b') a' c' fs fs'' where
+    AssignMemory (GGGCon arrl arrr b) a c (GGGCon' arrl' arrr' b') a' c' fs fs'' where
     assignMemory (f :>>>: g) prox bs = do
         (f', prox', bs') <- assignMemory f prox bs
         (g', prox'', bs'') <- assignMemory g prox' bs'
@@ -108,8 +108,8 @@ instance (AssignMemory arrl a b arrl' a' b' fs fs', AssignMemory arrr b c arrr' 
 
 instance (AssignMemory arrl a c arrl' a' c' fs fs',
     AssignMemory arrr b d arrr' b' d' fs' fs'') =>
-    AssignMemory (ArrowSSS arrl arrr) (P a b) (P c d)
-    (ArrowSSS' arrl' arrr') (PN a' b') (PN c' d') fs fs'' where
+    AssignMemory (SSSCon arrl arrr) (P a b) (P c d)
+    (SSSCon' arrl' arrr') (PN a' b') (PN c' d') fs fs'' where
     assignMemory (f :***: g) prox bs = do
         let (lp, rp) = splitProx prox
         (f', lp', bs') <- assignMemory f lp bs
@@ -123,7 +123,7 @@ instance (Fresh c fs c' fs',
     AssignMemory arr (P a c) (P b c) arr' (PN a' c') (PN b' d') fs' fs'',
     -- Then repeatedly substitute until the looped desc is constant.
     RepeatSub arr' a' b' c' d' arr'' b'' c'' (c' == d')) =>
-    AssignMemory (ArrowLoop arr c) a b (ArrowLoop' arr'' c'') a' b'' fs fs'' where
+    AssignMemory (LoopCon arr c) a b (LoopCon' arr'' c'') a' b'' fs fs'' where
     assignMemory (Loop f) prox bs = do
         (proxc, bs') <- fresh bs (Proxy :: Proxy c)
         (f', Proxy, bs'') <- assignMemory f (pairProx prox proxc) bs'
@@ -131,7 +131,7 @@ instance (Fresh c fs c' fs',
         return (Loop' f'', Proxy :: Proxy b'', bs'')
 
 class RepeatSub arr a b c d arr' b' c' eq | arr a b c d eq -> arr' b' c' where
-    repeatSub :: Proxy eq -> AFRPAnn arr (PN a c) (PN b d) -> AFRPAnn arr' (PN a c') (PN b' c')
+    repeatSub :: Proxy eq -> SFAnn arr (PN a c) (PN b d) -> SFAnn arr' (PN a c') (PN b' c')
 
 -- If we already have something of the right form, we are done.
 instance RepeatSub arr a b c c arr b c 'True where
@@ -171,39 +171,39 @@ type family Subst x sub where
     Subst desc '[] = desc
 
 class Substitute arr a b arr' a' b' sub | arr a b sub -> arr' a' b' where
-    substitute :: AFRPAnn arr a b -> Proxy sub -> AFRPAnn arr' a' b'
+    substitute :: SFAnn arr a b -> Proxy sub -> SFAnn arr' a' b'
 
-instance (a' ~ Subst a sub) => Substitute ArrowId' a a ArrowId' a' a' sub where
+instance (a' ~ Subst a sub) => Substitute IdCon' a a IdCon' a' a' sub where
     substitute Id' _ = Id'
 
 instance (a' ~ Subst a sub, b' ~ Subst b sub) =>
-    Substitute ArrowDropL' (PN a b) b ArrowDropL' (PN a' b') b' sub where
+    Substitute DropLCon' (PN a b) b DropLCon' (PN a' b') b' sub where
     substitute DropL' _ = DropL'
 
 instance (a' ~ Subst a sub, b' ~ Subst b sub) =>
-    Substitute ArrowDropR' (PN a b) a ArrowDropR' (PN a' b') a' sub where
+    Substitute DropRCon' (PN a b) a DropRCon' (PN a' b') a' sub where
     substitute DropR' _ = DropR'
 
 instance (a' ~ Subst a sub) =>
-    Substitute ArrowDup' a (PN a a) ArrowDup' a' (PN a' a') sub where
+    Substitute DupCon' a (PN a a) DupCon' a' (PN a' a') sub where
     substitute Dup' _ = Dup'
 
 instance (a' ~ Subst a sub, b' ~ Subst b sub, AsDesc a ~ AsDesc a', AsDesc b ~ AsDesc b') =>
-    Substitute ArrowArr' a b ArrowArr' a' b' sub where
+    Substitute ArrCon' a b ArrCon' a' b' sub where
     substitute (Arr' f) _ = Arr' f
 
 instance (b ~ Subst a sub, b' ~ Subst a' sub, AsDesc a ~ AsDesc b, AsDesc a' ~ AsDesc b') =>
-    Substitute ArrowPre' a a' ArrowPre' b b' sub where
+    Substitute PreCon' a a' PreCon' b b' sub where
     substitute (Pre' v) _ = Pre' v
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr b c arrr' b' c' sub) =>
-    Substitute (ArrowGGG' arrl arrr b) a c (ArrowGGG' arrl' arrr' b') a' c' sub where
+    Substitute (GGGCon' arrl arrr b) a c (GGGCon' arrl' arrr' b') a' c' sub where
     substitute (f :>>>:: g) sub = substitute f sub :>>>:: substitute g sub
 
 instance (Substitute arrl a b arrl' a' b' sub, Substitute arrr c d arrr' c' d' sub) =>
-    Substitute (ArrowSSS' arrl arrr) (PN a c) (PN b d) (ArrowSSS' arrl' arrr') (PN a' c') (PN b' d') sub where
+    Substitute (SSSCon' arrl arrr) (PN a c) (PN b d) (SSSCon' arrl' arrr') (PN a' c') (PN b' d') sub where
     substitute (f :***:: g) sub = substitute f sub :***:: substitute g sub
 
 instance (Substitute arr (PN a c) (PN b c) arr' (PN a' c') (PN b' c') sub) =>
-    Substitute (ArrowLoop' arr c) a b (ArrowLoop' arr' c') a' b' sub where
+    Substitute (LoopCon' arr c) a b (LoopCon' arr' c') a' b' sub where
     substitute (Loop' f) sub = Loop' (substitute f sub)

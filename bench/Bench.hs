@@ -1,8 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- A simple benchmark program which runs Test0's programs on 100_000 inputs.
--- Chupin runs their whole suite six times over six different switching values and six different sizes.
--- We can automate this process similarly, I just hope it's happy appending to a CSV file in doing so.
 
 import Test0
 
@@ -33,7 +31,7 @@ main = do
     
     defaultMainWith (defaultConfig {csvFile = Just "tests.csv", confInterval = cl99}) $ benches yampa af inps inps' (codeLen, codeRecLen)
 
-benches :: SF Double Double -> (Val (V Double) -> IO (Val (V Double))) -> [Double] -> [Val (V Double)] -> (Int, Int) -> [Benchmark]
+benches :: FRP.Yampa.SF Double Double -> (Val (V Double) -> IO (Val (V Double))) -> [Double] -> [Val (V Double)] -> (Int, Int) -> [Benchmark]
 benches sf afrp inps inps' params = [
         bench ("sf" ++ show params) $ nfIO (benchSF sf inps),
         bench ("afrp" ++ show params) $ nfIO (benchAFRP afrp inps')
@@ -51,7 +49,7 @@ benchAFRP !runner ins = do
         One out <- runner i
         forceM out
 
-benchSF :: SF Double Double -> [Double] -> IO ()
+benchSF :: FRP.Yampa.SF Double Double -> [Double] -> IO ()
 benchSF sf ins = do
     inputRef <- newIORef ins
     handle <- reactInit (return 0) (\handle' _ v -> forceM v >> return True) sf

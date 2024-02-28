@@ -93,16 +93,16 @@ mergeEnvRev env1 env2 = case filterEnv env1 keepFromEnv1 of
 -- ***
 
 pattern PairPat :: Pat () -> Pat () -> Pat ()
-pattern PairPat l r = PApp () (Qual () (ModuleName () "GenProc.GeneralisedArrow") (Ident () "Pair")) [l, r]
+pattern PairPat l r = PApp () (Qual () (ModuleName () "AFRP") (Ident () "Pair")) [l, r]
 
 pattern OnePat :: Pat () -> Pat ()
-pattern OnePat e = PApp () (Qual () (ModuleName () "GenProc.GeneralisedArrow") (Ident () "One")) [e]
+pattern OnePat e = PApp () (Qual () (ModuleName () "AFRP") (Ident () "One")) [e]
 
 pattern PairExp :: Exp () -> Exp () -> Exp ()
-pattern PairExp l r = App () (App () (Con () (Qual () (ModuleName () "GenProc.GeneralisedArrow") (Ident () "Pair"))) l) r
+pattern PairExp l r = App () (App () (Con () (Qual () (ModuleName () "AFRP") (Ident () "Pair"))) l) r
 
 pattern OneExp :: Exp () -> Exp ()
-pattern OneExp e = App () (Con () (Qual () (ModuleName () "GenProc.GeneralisedArrow") (Ident () "One"))) e
+pattern OneExp e = App () (Con () (Qual () (ModuleName () "AFRP") (Ident () "One"))) e
 
 -- Pattern matching by transforming an output of the form of the pattern into
 -- an env and the exp required to perform that transformation.

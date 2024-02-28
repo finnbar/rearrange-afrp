@@ -1,5 +1,14 @@
 module GenerateProcCode (generateProcCode, ProcCode(..), Line(..), Var, SingleVar, PairVar) where
 
+-- This generates values of type ProcCode, a structure that can be printed out to a file as proc code for Yampa and Oxbow.
+-- This follows the description in the paper for the most part: generate each line by picking randomly between the possible
+-- operations, and pick random variables from the variable set.
+-- The difference is that we separate out unused and used variables, to make sure that every variable is used.
+-- For this, we first generate the InputShape of each line, which says how many variables a line will use.
+-- We use this to set the number of repeated variables we're allowed to use over the course of generation
+-- This is calculated using: number of inputs needed (according to input shape) - number of lines being generated (each will generate a variable).
+-- Then, you can only randomly choose to use a variable in used iff the number of repeats allowed is greater than zero.
+
 import Hedgehog hiding (Var)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -77,6 +86,8 @@ generateNoRecShapes i = Gen.list (Range.singleton i) $
 generateProcCode :: Int -> Int -> Gen ProcCode
 generateProcCode len recLen = do
     inpShapes <- generateInputShapes len recLen
+    -- We make sure that a rec contains a cycle - this makes sure that there is a variable defined later in the rec than its use,
+    -- but also one defined earlier in the rec than its use.
     (lines_, VS unused _ _) <- Gen.filter recContainsCycle $ genLines (defaultVarSet inpShapes) inpShapes 1
     let outvar = Set.elemAt 0 unused
     return $ PC lines_ outvar

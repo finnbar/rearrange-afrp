@@ -1,6 +1,6 @@
--- This is taken from Dominic Orchard's effect-monad package.
+{-# LANGUAGE TypeFamilies, ConstraintKinds, PolyKinds, MultiParamTypeClasses #-}
 
-{-# LANGUAGE KindSignatures, TypeFamilies, ConstraintKinds, PolyKinds, MultiParamTypeClasses #-}
+-- This is copied directly from Dominic Orchard's effect-monad package.
 
 module Control.Effect where 
 
