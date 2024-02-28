@@ -12,24 +12,23 @@ import Data.Type.HList
 import Data.Type.Set hiding (Proxy(..))
 import Data.Proxy
 
--- TODO rename all arr to con, global type var renaming
-makeAFRP :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' env'' prog' prog''.
-    (Fresh a EmptyFreshKind a' fs,
-    AssignMemory arr a b arr' a' b' fs fs',
-    ToMIO arr' a' b' prog,
-    Augment prog b' fs' prog' b'' fs'',
-    env ~ EnvFromFreshState fs'',
+makeAFRP :: forall con inp out fk0 conAnn inpAnn outAnn fk1 prog prog' outAug fk2 env env' env'' prog''.
+    (Fresh inp EmptyFreshKind inpAnn fk0,
+    AssignMemory con inp out conAnn inpAnn outAnn fk0 fk1,
+    ToMIO conAnn inpAnn outAnn prog,
+    Augment prog outAnn fk1 prog' outAug fk2,
+    env ~ EnvFromFreshState fk2,
     HReverse env env',
-    ProxToRef a' env', ProxToRef b'' env',
+    ProxToRef inpAnn env', ProxToRef outAug env',
     Sortable env', Nubable (Sort env'),
-    AsDesc a' ~ a, AsDesc b'' ~ b,
+    AsDesc inpAnn ~ inp, AsDesc outAug ~ out,
     env'' ~ AsSet env',
     MakeProgConstraints prog' prog'' env'', CompileMems_ prog'' env'') =>
-    SF arr a b -> IO (Val a -> IO (Val b))
+    SF con inp out -> IO (Val inp -> IO (Val out))
 makeAFRP afrp = do
-    (inprox, bs) <- fresh @_ @a newFreshState (Proxy :: Proxy a)
+    (inprox, bs) <- fresh @_ @inp newFreshState (Proxy :: Proxy inp)
     (afrp', _, bs') <- assignMemory afrp inprox bs
-    (prog, outprox') <- toMIO afrp' (Proxy :: Proxy a')
+    (prog, outprox') <- toMIO afrp' (Proxy :: Proxy inpAnn)
     (prog', outprox'', MkFreshState env) <- augment prog outprox' bs'
     let env' = hReverse env
         inref = proxToRef inprox env'
@@ -42,20 +41,20 @@ makeAFRP afrp = do
         readRef outref
 
 -- This bypasses all of the Rearrange stuff, which we need in order to see if it compiles.
-toRearrangeable :: forall a a' fs arr b arr' b' fs' b'' fs'' env prog env' prog'.
-    (Fresh a EmptyFreshKind a' fs,
-    AssignMemory arr a b arr' a' b' fs fs',
-    ToMIO arr' a' b' prog,
-    Augment prog b' fs' prog' b'' fs'',
-    env ~ EnvFromFreshState fs'',
+toRearrangeable :: forall con inp out fk0 conAnn inpAnn outAnn fk1 prog prog' outAug fk2 env env'.
+    (Fresh inp EmptyFreshKind inpAnn fk0,
+    AssignMemory con inp out conAnn inpAnn outAnn fk0 fk1,
+    ToMIO conAnn inpAnn outAnn prog,
+    Augment prog outAnn fk1 prog' outAug fk2,
+    env ~ EnvFromFreshState fk2,
     HReverse env env',
-    AsDesc a' ~ a, AsDesc b'' ~ b,
-    ProxToRef a' env', ProxToRef b'' env') =>
-    SF arr a b -> IO (HList prog', HList env', Ref a', Ref b'')
+    AsDesc inpAnn ~ inp, AsDesc outAug ~ out,
+    ProxToRef inpAnn env', ProxToRef outAug env') =>
+    SF con inp out -> IO (HList prog', HList env', Ref inpAnn, Ref outAug)
 toRearrangeable afrp = do
-    (inprox, bs) <- fresh @_ @a newFreshState (Proxy :: Proxy a)
+    (inprox, bs) <- fresh @_ @inp newFreshState (Proxy :: Proxy inp)
     (afrp', _, bs') <- assignMemory afrp inprox bs
-    (prog, outprox') <- toMIO afrp' (Proxy :: Proxy a')
+    (prog, outprox') <- toMIO afrp' (Proxy :: Proxy inpAnn)
     (prog', outprox'', MkFreshState env) <- augment prog outprox' bs'
     -- The env must be reversed here because it is constructed in reverse - Fresh prepends
     -- rather than appends.

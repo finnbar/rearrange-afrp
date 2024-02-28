@@ -13,56 +13,56 @@ import Data.Memory.Memory (MemoryInv)
 import Data.Kind (Constraint)
 import Data.Proxy
 
-type ReadCells :: forall (ar :: SKind). DescAnn ar -> MemState -> Constraint
-class ReadCells ac res | ac -> res where
-    readCells :: Proxy ac -> Memory IO res (Val (AsDesc ac))
+type ReadCells :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
+class ReadCells descAnn grade | descAnn -> grade where
+    readCells :: Proxy descAnn -> Memory IO grade (Val (AsDesc descAnn))
 
 instance ReadCells (VN n a) '( '[], '[IOCell n a], '[]) where
     readCells _ = One <$> readIOCell
 
-instance (ReadCells lc lr, ReadCells rc rr, res ~ MemoryPlus lr rr, MemoryInv lr rr)
-    => ReadCells (PN lc rc) res where
+instance (ReadCells descL gradeL, ReadCells descR gradeR, res ~ MemoryPlus gradeL gradeR,
+    MemoryInv gradeL gradeR) => ReadCells (PN descL descR) res where
     readCells prox = Rearrange.do
         let (lp, rp) = splitProx prox
         left <- readCells lp
         Pair left <$> readCells rp
 
-type WriteCells :: forall (ar :: SKind). DescAnn ar -> MemState -> Constraint
-class WriteCells ac res | ac -> res where
-    writeCells :: Proxy ac -> Val (AsDesc ac) -> Memory IO res ()
+type WriteCells :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
+class WriteCells descAnn grade | descAnn -> grade where
+    writeCells :: Proxy descAnn -> Val (AsDesc descAnn) -> Memory IO grade ()
 
 instance WriteCells (VN n a) '( '[IOCell n a], '[], '[]) where
     writeCells _ (One v) = writeIOCell v
 
-instance (WriteCells lc lr, WriteCells rc rr, res ~ MemoryPlus lr rr, MemoryInv lr rr)
-    => WriteCells (PN lc rc) res where
+instance (WriteCells descL gradeL, WriteCells descR gradeR, res ~ MemoryPlus gradeL gradeR,
+    MemoryInv gradeL gradeR) => WriteCells (PN descL descR) res where
     writeCells prox (Pair a b) = Rearrange.do
         let (l, r) = splitProx prox
         writeCells l a
         writeCells r b
 
-type WriteCellsAfter :: forall (ar :: SKind). DescAnn ar -> MemState -> Constraint
-class WriteCellsAfter ac res | ac -> res where
-    writeCellsAfter :: Proxy ac -> Val (AsDesc ac) -> Memory IO res ()
+type WriteCellsAfter :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
+class WriteCellsAfter descAnn grade | descAnn -> grade where
+    writeCellsAfter :: Proxy descAnn -> Val (AsDesc descAnn) -> Memory IO grade ()
 
 instance WriteCellsAfter (VN n a) '( '[], '[], '[IOCell n a]) where
     writeCellsAfter _ (One v) = writeIOCellAfter v
 
-instance (WriteCellsAfter lc lr, WriteCellsAfter rc rr, res ~ MemoryPlus lr rr, MemoryInv lr rr)
-    => WriteCellsAfter (PN lc rc) res where
+instance (WriteCellsAfter descL gradeL, WriteCellsAfter descR gradeR, res ~ MemoryPlus gradeL gradeR,
+    MemoryInv gradeL gradeR) => WriteCellsAfter (PN descL descR) res where
     writeCellsAfter prox (Pair a b) = Rearrange.do
         let (l, r) = splitProx prox
         writeCellsAfter l a
         writeCellsAfter r b
 
-class ProxToRef ac env where
-    proxToRef :: Proxy ac -> HList env -> Ref ac
+class ProxToRef descAnn env where
+    proxToRef :: Proxy descAnn -> HList env -> Ref descAnn
 
 instance (LookupNth n env (IOCell n a)) => ProxToRef (VN n a) env where
     proxToRef Proxy env =
         let cell = lookupNth (Proxy :: Proxy n) env in VRef cell
 
-instance (ProxToRef l env, ProxToRef r env) => ProxToRef (PN l r) env where
+instance (ProxToRef descL env, ProxToRef descR env) => ProxToRef (PN descL descR) env where
     proxToRef prox env = let (pl, pr) = splitProx prox in
         PRef (proxToRef pl env) (proxToRef pr env)
 
@@ -77,8 +77,8 @@ instance (ProxToRef l env, ProxToRef r env) => ProxToRef (PN l r) env where
 
 type ToMIO :: forall (sk :: SKind) (sk' :: SKind).
     ConAnn sk sk' -> DescAnn sk -> DescAnn sk' -> [*] -> Constraint
-class ToMIO arr a b prog | arr a b -> prog where
-    toMIO :: SFAnn arr a b -> Proxy a -> IO (HList prog, Proxy b)
+class ToMIO conAnn inpAnn outAnn mios | conAnn inpAnn outAnn -> mios where
+    toMIO :: SFAnn conAnn inpAnn outAnn -> Proxy inpAnn -> IO (HList mios, Proxy outAnn)
 
 instance ToMIO IdCon' a a '[] where
     toMIO Id' prox = Prelude.return (HNil, prox)
@@ -97,43 +97,43 @@ instance ToMIO (ConstCon' a) x a '[] where
         let outprox = Proxy :: Proxy a
         Prelude.return (HNil, outprox)
 
-instance (ReadCells a ar, WriteCells b br,
-    MemoryInv ar br, prog ~ '[Memory IO (MemoryPlus ar br) ()]) =>
-    ToMIO ArrCon' a b prog where
+instance (ReadCells inpAnn read, WriteCells outAnn write,
+    MemoryInv read write, prog ~ '[MIO (MemoryPlus read write) ()]) =>
+    ToMIO ArrCon' inpAnn outAnn prog where
         toMIO (Arr' f) inprox = do
-            let outprox = Proxy :: Proxy b
+            let outprox = Proxy :: Proxy outAnn
                 comp = (f <$> readCells inprox) Rearrange.>>= writeCells outprox
             Prelude.return (comp :+: HNil, outprox)
 
-instance (ReadCells a ar, WriteCellsAfter a' ar', AsDesc a' ~ AsDesc a,
-    MemoryInv ar ar', mems ~ MemoryPlus ar ar') =>
-    ToMIO PreCon' a a' '[Memory IO mems ()] where
+instance (ReadCells inpAnn read, WriteCellsAfter outAnn after, AsDesc outAnn ~ AsDesc inpAnn,
+    MemoryInv read after, mems ~ MemoryPlus read after) =>
+    ToMIO PreCon' inpAnn outAnn '[Memory IO mems ()] where
         toMIO (Pre' v) inprox = do
-            let outprox = Proxy :: Proxy a'
+            let outprox = Proxy :: Proxy outAnn
                 comp = readCells inprox Rearrange.>>= writeCellsAfter outprox
             Prelude.return (comp :+: HNil, outprox)
 
-instance (ToMIO larr a b progl, ToMIO rarr b c progr,
-    prog ~ Combine progl progr) =>
-    ToMIO (GGGCon' larr rarr b) a c prog where
+instance (ToMIO conAnn1 inpAnn midAnn prog1, ToMIO conAnn2 midAnn outAnn prog2,
+    prog ~ Combine prog1 prog2) =>
+    ToMIO (GGGCon' conAnn1 conAnn2 midAnn) inpAnn outAnn prog where
         toMIO (f :>>>:: g) inprox = do
             (compf, midprox) <- toMIO f inprox
             (compg, outprox) <- toMIO g midprox
             Prelude.return (hCombine compf compg, outprox)
 
-instance (ToMIO larr la lb progl, ToMIO rarr ra rb progr,
-    prog ~ Combine progl progr) =>
-    ToMIO (SSSCon' larr rarr) (PN la ra) (PN lb rb) prog where
+instance (ToMIO conAnn1 inpLAnn outLAnn prog1, ToMIO conAnn2 inpRAnn outRAnn prog2,
+    prog ~ Combine prog1 prog2) =>
+    ToMIO (SSSCon' conAnn1 conAnn2) (PN inpLAnn inpRAnn) (PN outLAnn outRAnn) prog where
         toMIO (f :***:: g) prox = do
             let (inl, inr) = splitProx prox
             (compf, outl) <- toMIO f inl
             (compg, outr) <- toMIO g inr
             Prelude.return (hCombine compf compg, pairProx outl outr)
 
-instance (ToMIO arr (PN a c) (PN b c) prog) =>
-    ToMIO (LoopCon' arr c) a b prog where
+instance (ToMIO con (PN inpAnn loopedAnn) (PN outAnn loopedAnn) prog) =>
+    ToMIO (LoopCon' con loopedAnn) inpAnn outAnn prog where
         toMIO (Loop' f) inref = do
-            (comp, prox') <- toMIO f (pairProx inref (Proxy :: Proxy c))
+            (comp, prox') <- toMIO f (pairProx inref (Proxy :: Proxy loopedAnn))
             let (out, _) = splitProx prox'
             Prelude.return (comp, out)
 
@@ -144,17 +144,17 @@ instance (ToMIO arr (PN a c) (PN b c) prog) =>
 -- us the _next_ value being returned, not the current one.
 -- We fix this by adding one separate output cell by postcomposing >>> arr id to the input.
 type Augment :: [*] -> DescAnn a -> FreshKind -> [*] -> DescAnn a -> FreshKind -> Constraint
-class Augment prog a bs prog' a' bs' | prog a bs -> prog' a' bs' where
-    augment :: HList prog -> Proxy a -> FreshState bs -> IO (HList prog', Proxy a', FreshState bs')
+class Augment prog out fk0 prog' out' fk1 | prog out fk0 -> prog' out' fk1 where
+    augment :: HList prog -> Proxy out -> FreshState fk0 -> IO (HList prog', Proxy out', FreshState fk1)
 
-instance forall a a' fs fs' read write prog prog'.
-    (Fresh (AsDesc a) fs a' fs',
-    ReadCells a read, WriteCells a' write,
+instance forall out out' fk0 fk1 read write prog prog'.
+    (Fresh (AsDesc out) fk0 out' fk1,
+    ReadCells out read, WriteCells out' write,
     MemoryInv read write,
-    AsDesc a ~ AsDesc a',
+    AsDesc out ~ AsDesc out',
     prog' ~ Append (MIO (MemoryPlus read write) ()) prog) =>
-    Augment prog a fs prog' a' fs' where
+    Augment prog out fk0 prog' out' fk1 where
         augment prog prox bs = do
-            (prox', bs') <- fresh bs (Proxy :: Proxy (AsDesc a))
+            (prox', bs') <- fresh bs (Proxy :: Proxy (AsDesc out))
             let comp = readCells prox Rearrange.>>= writeCells prox'
             Prelude.return (hAppend comp prog, prox', bs')
