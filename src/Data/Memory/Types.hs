@@ -5,7 +5,7 @@
     UndecidableInstances, AllowAmbiguousTypes #-}
 
 module Data.Memory.Types (
-    MemAft(..), Cell(..), IsMemory,
+     MIO (..), Cell(..), IsMemory,
     Split(..), Set(..), Sort, MemoryUnion, MemoryPlus, MemoryWrites,
     MemoryReads, MemoryPostWrites, TrioUnion, MemState,
     Subset(..), NoConflicts, NoConflicts_, GetName,
@@ -20,20 +20,20 @@ type MemState = ([*], [*], [*])
 
 -- NOTE: This version of memory now has three sections: writes, reads and postwrites.
 -- They execute in that order.
-newtype MemAft (s :: MemState) a =
+newtype  MIO  (s :: MemState) a =
     Mem { runMemory :: Set (MemoryUnion s) -> IO a }
 
-instance Functor (MemAft s) where
+instance Functor ( MIO  s) where
     fmap f (Mem rm) = Mem $ \s -> f <$> rm s
 
 type family MemoryPostWrites x :: [*] where
-    MemoryPostWrites (MemAft '(ws, rs, ps) a) = ps
+    MemoryPostWrites ( MIO  '(ws, rs, ps) a) = ps
 
 type family MemoryWrites x :: [*] where
-    MemoryWrites (MemAft '(ws, rs, ps) a) = ws
+    MemoryWrites ( MIO  '(ws, rs, ps) a) = ws
 
 type family MemoryReads x :: [*] where
-    MemoryReads (MemAft '(ws, rs, ps) a) = rs
+    MemoryReads ( MIO  '(ws, rs, ps) a) = rs
 
 data Cell (s :: Nat) (t :: *) where
     Cell :: forall s t. IORef t -> Cell s t
@@ -42,7 +42,7 @@ type instance Cmp (Cell s t) (Cell s' t') = CmpNat s s'
 
 -- Specific definitions of Union and IsSet for lists of Cells.
 
--- Definitions of Union and IsSet for sets of MemAft, which are just
+-- Definitions of Union and IsSet for sets of  MIO , which are just
 -- elementwise lists of Cells.
 
 type TrioUnion as bs cs = Union as (Union bs cs)

@@ -26,7 +26,7 @@ Then you can just use the arrow combinators as you are used to.
 
 The structure of files is as follows:
 
-* `Data.Memory` and `Data.Type` contain a subset of the implementation of Keating and Gale's rearrange \[Keating21]. Parts of their implementation which we do not use are removed, and their main `Memory` monad has been replaced with `MemAft`. `Control.Effect` contains the main `Effect` definition from Orchard and Petricek's implementation of graded monads \[Orchard14].
+* `Data.Memory` and `Data.Type` contain a subset of the implementation of Keating and Gale's rearrange \[Keating21]. Parts of their implementation which we do not use are removed, and their main `Memory` monad has been replaced with ` MIO `. `Control.Effect` contains the main `Effect` definition from Orchard and Petricek's implementation of graded monads \[Orchard14].
 * `GenProc` contains our implementation of a proc desugaring using `haskell-src-exts`, as briefly discussed in Section 5. It is adapted from a more complete proc desugaring written by the authors.
 * The top level files (those in `src/` but no subfolder) are our implementation of SFRP using rearrange.
     * `AFRP` contains all of the type and GADT definitions defined throughout Section 4.

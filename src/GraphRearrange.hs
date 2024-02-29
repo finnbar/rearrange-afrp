@@ -32,7 +32,7 @@ instance MemsToIODependencies '[] env where
 
 instance (SortedHListToSubset env (MemoryUnion '(writes, reads, postwrites)), MemsToIODependencies xs env,
     ReifyCellList writes, ReifyCellList reads, ReifyCellList postwrites)
-    => MemsToIODependencies (MemAft '(writes, reads, postwrites) () ': xs) env where
+    => MemsToIODependencies ( MIO  '(writes, reads, postwrites) () ': xs) env where
     memsToIODependencies (mem :+: mems) env =
         (runMemory mem (sortedHListToSubset env),
         reifyCellList (Proxy :: Proxy writes),

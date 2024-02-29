@@ -12,13 +12,13 @@ import Data.Memory.Types
 import Data.IORef
 
 readCell :: forall s t. 
-    MemAft '( '[], '[Cell s t], '[]) t
+     MIO  '( '[], '[Cell s t], '[]) t
 readCell = Mem $ \(Ext (Cell pt) Empty) -> readIORef pt
 
 writeCell :: forall s t.
-    t -> MemAft '( '[Cell s t], '[], '[] ) ()
+    t ->  MIO  '( '[Cell s t], '[], '[] ) ()
 writeCell x = Mem $ \(Ext (Cell pt) Empty) -> writeIORef pt x
 
 writeCellAfter :: forall s t.
-    t -> MemAft '( '[], '[], '[Cell s t] ) ()
+    t ->  MIO  '( '[], '[], '[Cell s t] ) ()
 writeCellAfter x = Mem $ \(Ext (Cell pt) Empty) -> writeIORef pt x

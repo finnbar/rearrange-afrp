@@ -15,7 +15,7 @@ import Data.Proxy
 
 type ReadCells :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
 class ReadCells descAnn grade | descAnn -> grade where
-    readCells :: Proxy descAnn -> MemAft grade (Val (AsDesc descAnn))
+    readCells :: Proxy descAnn ->  MIO  grade (Val (AsDesc descAnn))
 
 instance ReadCells (VN n a) '( '[], '[Cell n a], '[]) where
     readCells _ = One <$> readCell
@@ -29,7 +29,7 @@ instance (ReadCells descL gradeL, ReadCells descR gradeR, res ~ MemoryPlus grade
 
 type WriteCells :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
 class WriteCells descAnn grade | descAnn -> grade where
-    writeCells :: Proxy descAnn -> Val (AsDesc descAnn) -> MemAft grade ()
+    writeCells :: Proxy descAnn -> Val (AsDesc descAnn) ->  MIO  grade ()
 
 instance WriteCells (VN n a) '( '[Cell n a], '[], '[]) where
     writeCells _ (One v) = writeCell v
@@ -43,7 +43,7 @@ instance (WriteCells descL gradeL, WriteCells descR gradeR, res ~ MemoryPlus gra
 
 type WriteCellsAfter :: forall (sk :: SKind). DescAnn sk -> MemState -> Constraint
 class WriteCellsAfter descAnn grade | descAnn -> grade where
-    writeCellsAfter :: Proxy descAnn -> Val (AsDesc descAnn) -> MemAft grade ()
+    writeCellsAfter :: Proxy descAnn -> Val (AsDesc descAnn) ->  MIO  grade ()
 
 instance WriteCellsAfter (VN n a) '( '[], '[], '[Cell n a]) where
     writeCellsAfter _ (One v) = writeCellAfter v
@@ -98,7 +98,7 @@ instance ToMIO (ConstCon' a) x a '[] where
         Prelude.return (HNil, outprox)
 
 instance (ReadCells inpAnn read, WriteCells outAnn write,
-    MemoryInv read write, prog ~ '[MemAft (MemoryPlus read write) ()]) =>
+    MemoryInv read write, prog ~ '[ MIO  (MemoryPlus read write) ()]) =>
     ToMIO ArrCon' inpAnn outAnn prog where
         toMIO (Arr' f) inprox = do
             let outprox = Proxy :: Proxy outAnn
@@ -107,7 +107,7 @@ instance (ReadCells inpAnn read, WriteCells outAnn write,
 
 instance (ReadCells inpAnn read, WriteCellsAfter outAnn after, AsDesc outAnn ~ AsDesc inpAnn,
     MemoryInv read after, mems ~ MemoryPlus read after) =>
-    ToMIO PreCon' inpAnn outAnn '[MemAft mems ()] where
+    ToMIO PreCon' inpAnn outAnn '[ MIO  mems ()] where
         toMIO (Pre' v) inprox = do
             let outprox = Proxy :: Proxy outAnn
                 comp = readCells inprox Rearrange.>>= writeCellsAfter outprox
@@ -152,7 +152,7 @@ instance forall out out' fk0 fk1 read write prog prog'.
     ReadCells out read, WriteCells out' write,
     MemoryInv read write,
     AsDesc out ~ AsDesc out',
-    prog' ~ Append (MemAft (MemoryPlus read write) ()) prog) =>
+    prog' ~ Append ( MIO  (MemoryPlus read write) ()) prog) =>
     Augment prog out fk0 prog' out' fk1 where
         augment prog prox bs = do
             (prox', bs') <- fresh bs (Proxy :: Proxy (AsDesc out))

@@ -9,7 +9,7 @@ module Data.Memory.Program (
     MakeProgConstraints, RunMems_, CompileMems_, compileProgram_
 ) where
 
-import Data.Memory.Types (Set, MemAft, NoConflicts_) 
+import Data.Memory.Types (Set,  MIO , NoConflicts_) 
 import Data.Memory.RunMemory (RunMems(..), RunMems_(..), CompileMems_(..))
 import Data.Type.TSort (ordered, OrderedConstraints)
 import Data.Type.HList (HList(..))
