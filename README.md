@@ -6,8 +6,8 @@ This is the code associated with the paper _Functional Reactive Programming, Rea
 
 To run it, perform one of the following:
 
-* `stack run l rf` will generate `generated/Test0.hs` as in Section 6.1 of the paper. This contains a Yampa implementation and an Oxbow implementation of a randomly generated proc-notation program.
-* `stack bench` will benchmark the current `generated/Test0.hs`, as in Section 6.2.
+* `stack run l rf` will generate `generated/Test0.hs` as in Section 7.1 of the paper. This contains a Yampa implementation and an Oxbow implementation of a randomly generated proc-notation program.
+* `stack bench` will benchmark the current `generated/Test0.hs`, as in Section 7.2.
 * `stack repl` will give you an interactive prompt, as per usual. You can type `runExamples` to see a few examples (stored in `app/Examples.hs`) compile and run. If you want to build your own programs, you can do so from here or in another file.
 
 ## Writing your own programs
@@ -27,13 +27,13 @@ Then you can just use the arrow combinators as you are used to.
 The structure of files is as follows:
 
 * `Data.Memory` and `Data.Type` contain a subset of the implementation of Keating and Gale's rearrange \[Keating21]. Parts of their implementation which we do not use are removed, and their main `Memory` monad has been replaced with ` MIO `. `Control.Effect` contains the main `Effect` definition from Orchard and Petricek's implementation of graded monads \[Orchard14].
-* `GenProc` contains our implementation of a proc desugaring using `haskell-src-exts`, as briefly discussed in Section 5. It is adapted from a more complete proc desugaring written by the authors.
+* `GenProc` contains our implementation of a proc desugaring using `haskell-src-exts`, as briefly discussed in Section 6. It is adapted from a more complete proc desugaring written by the authors.
 * The top level files (those in `src/` but no subfolder) are our implementation of SFRP using rearrange.
-    * `AFRP` contains all of the type and GADT definitions defined throughout Section 4.
-    * `GraphRearrange` contains the value-level implementation of rearrange, as mentioned at the end of Section 6.2. This was used so we could compile larger programs without running out of memory.
-    * `MakeMIO` contains the definition of `ToMIO`. (Section 4.3.)
-    * `Naming` contains the definition of `AssignMemory`. (Section 4.2.)
-    * `RAFRP` contains the final definitions for running the whole transformation, as in Section 4.4. `makeAFRP` utilises the rearrange library, while `makeRearrangeable` utilises our runtime version.
+    * `AFRP` contains all of the type and GADT definitions defined throughout Section 5.
+    * `GraphRearrange` contains the value-level implementation of rearrange, as mentioned at the end of Section 7.2. This was used so we could compile larger programs without running out of memory.
+    * `MakeMIO` contains the definition of `ToMIO`. (Section 5.3.)
+    * `Naming` contains the definition of `AssignMemory`. (Section 5.2.)
+    * `RAFRP` contains the final definitions for running the whole transformation, as in Section 5.4. `makeAFRP` utilises the rearrange library, while `makeRearrangeable` utilises our runtime version.
     * `Rearrange` is from the rearrange library, and provides a handy interface for importing all of its definitions.
 
 ## Data collection
